@@ -4,9 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/rneatherway/slack"
 )
+
+// Client wraps the Slack API client
+type Client struct {
+	client *slack.Client
+	teamID string
+}
 
 // AuthResult contains authentication information
 type AuthResult struct {
@@ -15,6 +22,7 @@ type AuthResult struct {
 	UserID      string
 	UserName    string
 	Authenticated bool
+	Client      *Client
 }
 
 // Authenticate establishes a connection to Slack using cookies from the local Slack app
@@ -57,7 +65,95 @@ func Authenticate(team string) (*AuthResult, error) {
 		UserID:        authResponse.UserID,
 		UserName:      authResponse.User,
 		Authenticated: true,
+		Client:        &Client{client: client, teamID: authResponse.TeamID},
 	}, nil
+}
+
+// Channel represents a Slack channel
+type Channel struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	IsChannel   bool   `json:"is_channel"`
+	IsPrivate   bool   `json:"is_private"`
+	IsMember    bool   `json:"is_member"`
+	NumMembers  int    `json:"num_members"`
+}
+
+// Message represents a Slack message
+type Message struct {
+	Type      string `json:"type"`
+	User      string `json:"user"`
+	Text      string `json:"text"`
+	Timestamp string `json:"ts"`
+	ThreadTS  string `json:"thread_ts,omitempty"`
+}
+
+// ListChannels fetches all channels the user is a member of
+func (c *Client) ListChannels(ctx context.Context) ([]Channel, error) {
+	bs, err := c.client.API(ctx, "GET", "conversations.list", map[string]string{
+		"types": "public_channel,private_channel",
+		"limit": "1000",
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list channels: %w", err)
+	}
+
+	var response struct {
+		OK       bool      `json:"ok"`
+		Channels []Channel `json:"channels"`
+		Error    string    `json:"error"`
+	}
+
+	if err := json.Unmarshal(bs, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse channels list: %w", err)
+	}
+
+	if !response.OK {
+		return nil, fmt.Errorf("Slack API error: %s", response.Error)
+	}
+
+	// Filter to only channels the user is a member of
+	var memberChannels []Channel
+	for _, ch := range response.Channels {
+		if ch.IsMember {
+			memberChannels = append(memberChannels, ch)
+		}
+	}
+
+	return memberChannels, nil
+}
+
+// FetchMessages retrieves messages from a channel
+func (c *Client) FetchMessages(ctx context.Context, channelID string, oldest time.Time) ([]Message, error) {
+	params := map[string]string{
+		"channel": channelID,
+		"limit":   "1000",
+	}
+	
+	if !oldest.IsZero() {
+		params["oldest"] = fmt.Sprintf("%d.000000", oldest.Unix())
+	}
+
+	bs, err := c.client.API(ctx, "GET", "conversations.history", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch messages: %w", err)
+	}
+
+	var response struct {
+		OK       bool      `json:"ok"`
+		Messages []Message `json:"messages"`
+		Error    string    `json:"error"`
+	}
+
+	if err := json.Unmarshal(bs, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse messages: %w", err)
+	}
+
+	if !response.OK {
+		return nil, fmt.Errorf("Slack API error: %s", response.Error)
+	}
+
+	return response.Messages, nil
 }
 
 // formatAuthError provides user-friendly error messages for common authentication failures

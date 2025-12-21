@@ -84,7 +84,7 @@ Messages are enriched with computed metadata:
 - **FR1.1.7**: Support multiple workspaces
 
 #### FR1.2: GitHub Integration
-- **FR1.2.1**: Authenticate using personal access tokens or OAuth
+- **FR1.2.1**: Authenticate using GitHub CLI (`gh`) or personal access tokens
 - **FR1.2.2**: Fetch repository metadata
 - **FR1.2.3**: Fetch issues with all comments
 - **FR1.2.4**: Fetch pull requests with comments and reviews
@@ -92,14 +92,23 @@ Messages are enriched with computed metadata:
 - **FR1.2.6**: Fetch user profiles
 - **FR1.2.7**: Support multiple repositories
 
-#### FR1.3: Email Integration
-- **FR1.3.1**: Connect via IMAP to email accounts
-- **FR1.3.2**: Parse local mbox/maildir formats
-- **FR1.3.3**: Extract email threads using References/In-Reply-To headers
-- **FR1.3.4**: Parse MIME multipart messages
-- **FR1.3.5**: Extract attachments metadata
-- **FR1.3.6**: Build contact list from sender/recipient data
-- **FR1.3.7**: Support multiple email accounts
+#### FR1.3: Kusto/Azure Data Explorer Integration
+- **FR1.3.1**: Authenticate using Azure CLI (`az`) for access tokens
+- **FR1.3.2**: Connect to Azure Data Explorer clusters
+- **FR1.3.3**: Query conversation data using KQL (Kusto Query Language)
+- **FR1.3.4**: Map query results to normalized format (e.g., support tickets, logs)
+- **FR1.3.5**: Support custom KQL queries for data extraction
+- **FR1.3.6**: Handle result pagination and large datasets
+- **FR1.3.7**: Support multiple clusters and databases
+
+#### FR1.4: Email Integration
+- **FR1.4.1**: Connect via IMAP to email accounts
+- **FR1.4.2**: Parse local mbox/maildir formats
+- **FR1.4.3**: Extract email threads using References/In-Reply-To headers
+- **FR1.4.4**: Parse MIME multipart messages
+- **FR1.4.5**: Extract attachments metadata
+- **FR1.4.6**: Build contact list from sender/recipient data
+- **FR1.4.7**: Support multiple email accounts
 
 ### FR2: Data Storage
 
@@ -145,10 +154,11 @@ Messages are enriched with computed metadata:
 
 - **FR4.1**: Map Slack messages to normalized schema
 - **FR4.2**: Map GitHub issues/PRs/comments to normalized schema
-- **FR4.3**: Map email messages to normalized schema
-- **FR4.4**: Extract common fields (timestamp, author, content, thread structure)
-- **FR4.5**: Preserve source-specific metadata in separate field
-- **FR4.6**: Handle format differences (Markdown, HTML, plain text)
+- **FR4.3**: Map Kusto query results to normalized schema
+- **FR4.4**: Map email messages to normalized schema
+- **FR4.5**: Extract common fields (timestamp, author, content, thread structure)
+- **FR4.6**: Preserve source-specific metadata in separate field
+- **FR4.7**: Handle format differences (Markdown, HTML, plain text)
 
 ### FR5: Identity Resolution
 
@@ -176,7 +186,7 @@ Messages are enriched with computed metadata:
 - **FR7.1.5**: Assign confidence scores to classifications
 
 #### FR7.2: Entity Extraction
-- **FR7.2.1**: Extract user mentions
+- **FR7.2.1**: Extract user mentions and named entities (people, organizations)
 - **FR7.2.2**: Extract URLs and categorize (documentation, internal links, external)
 - **FR7.2.3**: Extract code blocks
 - **FR7.2.4**: Extract technical terms/keywords
@@ -907,12 +917,14 @@ The following are explicitly **not** goals for this project:
 
 ### Authentication Approach
 - For Slack: Use `github.com/rneatherway/slack` library for cookie-based auth
-- For GitHub: Support personal access tokens and GitHub CLI auth
+- For GitHub: Use GitHub CLI (`gh`) to obtain tokens or execute API calls directly
+- For Kusto: Use Azure CLI (`az`) to obtain access tokens for Azure Data Explorer
 - For Email: Support OAuth2 where available, app passwords otherwise
 
 ### Key Go Libraries
 - **Slack API**: `github.com/rneatherway/slack`
-- **GitHub API**: `github.com/google/go-github`
+- **GitHub API**: `github.com/google/go-github` or GitHub CLI (`gh`) invocation
+- **Kusto/ADX**: `github.com/Azure/azure-kusto-go` with Azure CLI (`az`) for auth
 - **Email**: `github.com/emersion/go-imap`
 - **Graph**: Consider `gonum.org/v1/gonum/graph` or implement custom
 - **CLI**: `github.com/spf13/cobra`

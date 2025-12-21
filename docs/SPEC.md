@@ -873,23 +873,23 @@ The ThreadMine project will be considered successful when it meets the following
 
 ### Must Have (MVP)
 1. ✅ Successfully authenticate with Slack using browser cookies
-2. ✅ Fetch and cache messages from at least one Slack channel
-3. ✅ Normalize Slack messages to common schema
-4. ✅ Build basic message reply graph
-5. ✅ Implement cache-aside pattern for message retrieval
-6. ✅ Classify messages as questions or answers using heuristics
-7. ✅ Output valid JSON for all commands
-8. ✅ Work on macOS, Linux, and Windows
+2. Fetch and cache messages from at least one Slack channel
+3. Normalize Slack messages to common schema
+4. Build basic message reply graph
+5. Implement cache-aside pattern for message retrieval
+6. Classify messages as questions or answers using heuristics
+7. Output valid JSON for all commands
+8. Work on macOS, Linux, and Windows
 
 ### Should Have (Full v1.0)
-1. ✅ Support GitHub issues and PRs
-2. ✅ Support email (IMAP and mbox)
-3. ✅ Cross-source identity resolution
-4. ✅ Full graph analysis (threads, user interactions, clusters)
-5. ✅ Solution quality assessment
-6. ✅ Cache management commands
-7. ✅ Comprehensive error handling and logging
-8. ✅ Configuration file support
+1. Support GitHub issues and PRs
+2. Support email (IMAP and mbox)
+3. Cross-source identity resolution
+4. Full graph analysis (threads, user interactions, clusters)
+5. Solution quality assessment
+6. Cache management commands
+7. Comprehensive error handling and logging
+8. Configuration file support
 
 ### Could Have (Future)
 1. Web UI for browsing cached data

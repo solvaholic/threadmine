@@ -1,0 +1,17 @@
+# Binaries
+mine
+*.exe
+dist/
+
+# Go
+*.out
+*.test
+vendor/
+
+# IDE
+.DS_Store
+.idea/
+
+# Local development
+.env
+*.local

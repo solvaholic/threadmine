@@ -874,7 +874,7 @@ The ThreadMine project will be considered successful when it meets the following
 ### Must Have (MVP)
 1. ✅ Successfully authenticate with Slack using browser cookies
 2. ✅ Fetch and cache messages from at least one Slack channel
-3. Normalize Slack messages to common schema
+3. ✅ Normalize Slack messages to common schema
 4. Build basic message reply graph
 5. Implement cache-aside pattern for message retrieval
 6. Classify messages as questions or answers using heuristics

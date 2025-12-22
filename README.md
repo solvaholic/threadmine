@@ -9,7 +9,7 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 - **Caches data** efficiently to minimize API calls and respect rate limits
 - **Normalizes messages** across platforms into a common schema
 - **Builds reply graphs** to track conversation threads and relationships
-- **Analyzes threads** to identify questions, answers, and solutions (coming soon)
+- **Classifies messages** using heuristics to identify questions, answers, solutions, and acknowledgments
 
 ## Current Status
 
@@ -19,9 +19,9 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 3. ✅ Normalize Slack messages to common schema
 4. ✅ Build basic message reply graph
 5. ✅ Implement cache-aside pattern for message retrieval
+6. ✅ Classify messages as questions or answers using heuristics
 
 **Next Steps:**
-6. Classify messages as questions or answers using heuristics
 7. Output valid JSON for all commands
 8. Cross-platform support (Linux, Windows)
 
@@ -58,6 +58,20 @@ All data is stored in `~/.threadmine/`:
 - **`raw/`** - Source-specific API responses (JSON)
 - **`normalized/`** - Common schema messages (JSON/JSONL)
 - **`graph/`** - Reply graphs and thread structures (JSON)
+- **`annotations/`** - Message classifications and analysis (JSON)
+
+### Message Classification
+
+Heuristic-based classification identifies:
+
+- **Questions** - Question marks, help-seeking phrases, question starters
+- **Answers** - Responses in question threads with answer indicators
+- **Solutions** - Code blocks, step-by-step instructions, documentation links
+- **Acknowledgments** - Thanks, success confirmations, positive reactions
+
+Each classification includes confidence scores (0.0-1.0) and signals that triggered it.
+
+See `internal/classify/` for implementation.
 
 ### Cache-Aside Pattern
 

@@ -1,4 +1,5 @@
 # Binaries
+graph-demo
 mine
 *.exe
 dist/

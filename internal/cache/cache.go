@@ -125,6 +125,44 @@ func SaveChannelInfo(teamID, channelID string, info interface{}) error {
 }
 
 // SaveChannelsList saves the list of channels
+// LoadMessages retrieves cached messages for a channel and date range
+// Returns nil if no cache exists (cache miss)
+func LoadMessages(teamID, channelID string, since time.Time) (*MessageCache, error) {
+	msgDir, err := ChannelMessagesDir(teamID, channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the cache file exists for the requested date
+	// For simplicity, check today's date first
+	date := time.Now().Format("2006-01-02")
+	filePath := filepath.Join(msgDir, fmt.Sprintf("%s.json", date))
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, nil // Cache miss
+	}
+
+	// Read and parse the cache file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cache file: %w", err)
+	}
+
+	var cache MessageCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, fmt.Errorf("failed to parse cache file: %w", err)
+	}
+
+	// Check if cache is fresh enough (based on since parameter)
+	// If the cached data is older than requested, treat as cache miss
+	if !since.IsZero() && cache.FetchedAt.Before(since) {
+		return nil, nil // Cache too old
+	}
+
+	return &cache, nil
+}
+
 func SaveChannelsList(teamID string, channels interface{}) error {
 	slackDir, err := RawSlackDir(teamID)
 	if err != nil {

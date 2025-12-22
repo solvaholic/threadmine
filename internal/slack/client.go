@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rneatherway/slack"
@@ -123,7 +125,55 @@ func (c *Client) ListChannels(ctx context.Context) ([]Channel, error) {
 	return memberChannels, nil
 }
 
-// FetchMessages retrieves messages from a channel
+// GetMessages implements cache-aside pattern for message retrieval
+// Checks cache first, fetches from API on miss, and stores in cache
+func (c *Client) GetMessages(ctx context.Context, channelID string, oldest time.Time, cacheDir string) ([]Message, error) {
+	// Import cache package for cache operations
+	// First, try to load from cache
+	cache, err := loadMessagesFromCache(c.teamID, channelID, oldest)
+	if err != nil {
+		return nil, fmt.Errorf("error checking cache: %w", err)
+	}
+
+	// Cache hit - return cached messages
+	if cache != nil {
+		messages := make([]Message, 0, len(cache.Messages))
+		for _, msg := range cache.Messages {
+			// Convert interface{} back to Message
+			msgBytes, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			var message Message
+			if err := json.Unmarshal(msgBytes, &message); err != nil {
+				continue
+			}
+			messages = append(messages, message)
+		}
+		return messages, nil
+	}
+
+	// Cache miss - fetch from API
+	messages, err := c.FetchMessages(ctx, channelID, oldest)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache
+	var messagesToCache []interface{}
+	for _, msg := range messages {
+		messagesToCache = append(messagesToCache, msg)
+	}
+
+	if err := saveMessagesToCache(c.teamID, channelID, messagesToCache); err != nil {
+		// Log warning but don't fail - we have the data
+		fmt.Fprintf(os.Stderr, "Warning: failed to cache messages: %v\n", err)
+	}
+
+	return messages, nil
+}
+
+// FetchMessages retrieves messages from a channel (direct API call, no caching)
 func (c *Client) FetchMessages(ctx context.Context, channelID string, oldest time.Time) ([]Message, error) {
 	params := map[string]string{
 		"channel": channelID,
@@ -154,6 +204,100 @@ func (c *Client) FetchMessages(ctx context.Context, channelID string, oldest tim
 	}
 
 	return response.Messages, nil
+}
+
+// loadMessagesFromCache is a helper function that loads messages from cache
+func loadMessagesFromCache(teamID, channelID string, since time.Time) (*messageCache, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %w", err)
+	}
+	
+	msgDir := filepath.Join(home, ".threadmine", "raw", "slack", "workspaces", teamID, "channels", channelID, "messages")
+	date := time.Now().Format("2006-01-02")
+	filePath := filepath.Join(msgDir, fmt.Sprintf("%s.json", date))
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, nil // Cache miss
+	}
+
+	// Read and parse the cache file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cache file: %w", err)
+	}
+
+	var cache messageCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, fmt.Errorf("failed to parse cache file: %w", err)
+	}
+
+	// Check if cache is fresh enough
+	if !since.IsZero() && cache.FetchedAt.Before(since) {
+		return nil, nil // Cache too old
+	}
+
+	return &cache, nil
+}
+
+// saveMessagesToCache is a helper function that saves messages to cache
+func saveMessagesToCache(teamID, channelID string, messages []interface{}) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	msgDir := filepath.Join(home, ".threadmine", "raw", "slack", "workspaces", teamID, "channels", channelID, "messages")
+
+	// Create directory with restrictive permissions
+	if err := os.MkdirAll(msgDir, 0700); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	// Use today's date for the filename
+	date := time.Now().Format("2006-01-02")
+	filePath := filepath.Join(msgDir, fmt.Sprintf("%s.json", date))
+
+	cache := messageCache{
+		TeamID:    teamID,
+		ChannelID: channelID,
+		Date:      date,
+		FetchedAt: time.Now(),
+		Messages:  messages,
+	}
+
+	// Marshal to JSON with indentation for human readability
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal messages: %w", err)
+	}
+
+	// Write to temp file first, then rename (atomic write)
+	tempPath := filePath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write cache file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, filePath); err != nil {
+		os.Remove(tempPath) // Clean up temp file
+		return fmt.Errorf("failed to rename cache file: %w", err)
+	}
+
+	return nil
+}
+
+// messageCache represents cached message data
+type messageCache struct {
+	TeamID    string        `json:"team_id"`
+	ChannelID string        `json:"channel_id"`
+	Date      string        `json:"date"`
+	FetchedAt time.Time     `json:"fetched_at"`
+	Messages  []interface{} `json:"messages"`
 }
 
 // formatAuthError provides user-friendly error messages for common authentication failures

@@ -1,0 +1,49 @@
+# Dependabot configuration for ThreadMine
+# Automatically checks for dependency updates and creates pull requests
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Go module dependencies
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    # Group minor and patch updates together to reduce PR noise
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Keep PRs manageable
+    open-pull-requests-limit: 5
+    # Add labels for easier filtering
+    labels:
+      - "dependencies"
+      - "go"
+    # Commit message prefix
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Allow Dependabot to rebase PRs when needed
+    rebase-strategy: "auto"
+
+  # GitHub Actions workflow dependencies (if any are added later)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

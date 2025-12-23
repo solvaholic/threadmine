@@ -75,7 +75,7 @@ Messages are enriched with computed metadata:
 ### FR1: Data Extraction
 
 #### FR1.1: Slack Integration
-- **FR1.1.1**: Extract Slack cookies from system keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+- **FR1.1.1**: Extract Slack cookies from macOS Keychain (Windows Credential Manager and Linux Secret Service support is a future goal)
 - **FR1.1.2**: Exchange cookies for API tokens
 - **FR1.1.3**: Fetch channel lists and metadata
 - **FR1.1.4**: Fetch messages from channels with date ranges
@@ -289,9 +289,9 @@ Messages are enriched with computed metadata:
 - **NFR5.5**: Comprehensive help text and examples
 
 ### NFR6: Portability
-- **NFR6.1**: Support macOS, Linux, and Windows
-- **NFR6.2**: Use cross-platform libraries for keychain access
-- **NFR6.3**: Handle filesystem path differences
+- **NFR6.1**: Primary support for macOS (Linux/Windows support is a future goal)
+- **NFR6.2**: Use cross-platform libraries where practical (e.g., for filesystem operations)
+- **NFR6.3**: Handle filesystem path differences for macOS compatibility
 - **NFR6.4**: Single binary distribution (no runtime dependencies)
 
 ## Use Cases
@@ -879,7 +879,6 @@ The ThreadMine project will be considered successful when it meets the following
 5. ✅ Implement cache-aside pattern for message retrieval
 6. ✅ Classify messages as questions or answers using heuristics
 7. ✅ Output valid JSON for all commands
-8. Work on macOS, Linux, and Windows
 
 ### Should Have (Full v1.0)
 1. Support GitHub issues and PRs
@@ -892,13 +891,14 @@ The ThreadMine project will be considered successful when it meets the following
 8. Configuration file support
 
 ### Could Have (Future)
-1. Web UI for browsing cached data
-2. Machine learning models for better classification
-3. Export to other formats (Markdown, HTML)
-4. Real-time monitoring mode
-5. Integration with more sources (Discord, Teams, Jira)
-6. Collaborative filtering recommendations
-7. Automatic summarization
+1. Cross-platform support (Linux, Windows) - currently macOS-focused
+2. Web UI for browsing cached data
+3. Machine learning models for better classification
+4. Export to other formats (Markdown, HTML)
+5. Real-time monitoring mode
+6. Integration with more sources (Discord, Teams, Jira)
+7. Collaborative filtering recommendations
+8. Automatic summarization
 
 ## Out of Scope
 

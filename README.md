@@ -22,8 +22,11 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 6. ✅ Classify messages as questions or answers using heuristics
 7. ✅ Output valid JSON for all commands
 
-**Next Steps:**
-8. Cross-platform support (Linux, Windows)
+**Next Steps (v1.0):**
+- Support GitHub issues and PRs
+- Support email (IMAP and mbox)
+- Cross-source identity resolution
+- Full graph analysis and solution quality assessment
 
 ## Quick Start
 

@@ -58,7 +58,7 @@ ThreadMine (`mine` CLI) is a Go-based tool for extracting, caching, and analyzin
 
 When implementing features, prioritize:
 1. Cache integrity and performance
-2. Cross-platform compatibility (macOS, Linux, Windows)
-3. API abuse prevention (respect rate limits)
-4. Clear error messages and logging
-5. Schema consistency across sources
+2. API abuse prevention (respect rate limits)
+3. Clear error messages and logging
+4. Schema consistency across sources
+5. macOS-focused development (cross-platform support is a future goal)

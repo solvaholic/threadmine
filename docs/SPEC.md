@@ -878,7 +878,7 @@ The ThreadMine project will be considered successful when it meets the following
 4. ✅ Build basic message reply graph
 5. ✅ Implement cache-aside pattern for message retrieval
 6. ✅ Classify messages as questions or answers using heuristics
-7. Output valid JSON for all commands
+7. ✅ Output valid JSON for all commands
 8. Work on macOS, Linux, and Windows
 
 ### Should Have (Full v1.0)

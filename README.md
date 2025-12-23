@@ -20,9 +20,9 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 4. ✅ Build basic message reply graph
 5. ✅ Implement cache-aside pattern for message retrieval
 6. ✅ Classify messages as questions or answers using heuristics
+7. ✅ Output valid JSON for all commands
 
 **Next Steps:**
-7. Output valid JSON for all commands
 8. Cross-platform support (Linux, Windows)
 
 ## Quick Start
@@ -31,13 +31,30 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 # Build the tool
 go build -o mine ./cmd/mine
 
-# Run to fetch Slack messages and build graph
-./mine
+# Fetch Slack messages from a workspace
+./mine fetch slack --workspace solvahol
 
-# View graph statistics
-go build -o graph-demo ./cmd/graph-demo
-./graph-demo
+# Query messages
+./mine messages --source slack --since 2025-12-20
+
+# Search for specific content
+./mine messages --search "error" --source slack
+
+# View cache information
+./mine cache info
+
+# Get help for any command
+./mine --help
+./mine fetch --help
 ```
+
+### Available Commands
+
+- `mine fetch slack` - Fetch data from Slack workspaces
+- `mine messages` - Query normalized messages with filters
+- `mine cache info` - Show cache statistics and storage info
+
+All commands output valid JSON by default. Use `--format json` (default), `jsonl`, or `table` for different output formats.
 
 ## Architecture
 

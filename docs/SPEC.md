@@ -40,6 +40,26 @@ ThreadMine treats conversations from different platforms as variations of the sa
 - **Channels**: Conversation spaces (Slack channels, GitHub issues, email threads)
 - **Users**: People who participate across platforms
 
+#### Platform Hierarchy Mapping
+
+Different platforms have different hierarchical structures. ThreadMine normalizes them as follows:
+
+| Concept | Slack | GitHub | Support Ticket | Kusto |
+| --- | --- | --- | --- | --- |
+| **Organization** | Workspace/Team | Organization | Organization | Cluster |
+| **Container** | Channel | Repository | *(ticket system)* | Database/Table |
+| **Thread** | Thread (or top-level msg) | Issue/PR | Ticket | *(query-defined)* |
+| **Message** | Message | Comment/Review | Comment | Row/Event |
+| **User** | User | User | User (Agent/Customer) | User/Principal |
+
+**Key implications for normalization**:
+- **Slack**: Channels contain many threads; top-level messages are treated as single-message threads
+- **GitHub Issues/PRs**: Each Issue/PR is a separate thread (with Repository as ParentSpace)
+- **GitHub Discussions**: Deferred for future implementation (structurally similar to Slack channels with nested comment threads)
+- **Support Tickets**: Each ticket is a thread; the "container" is the ticket system itself
+- **Slack DMs**: Treated as channels (containers) that can have multiple threads
+- **Support Users**: May be Agents (internal) or Customers (external), tracked in user metadata
+
 ### 2. Three-Layer Architecture
 
 ```

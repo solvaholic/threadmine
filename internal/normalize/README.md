@@ -10,6 +10,26 @@ The normalization layer sits between raw cached data and the analysis layer:
 Raw Layer (source-specific) → Normalized Layer → Analysis Layer
 ```
 
+### Platform Mapping to Normalized Schema
+
+Different platforms have different hierarchical structures. The normalization layer maps them as follows:
+
+| Normalized Field | Slack | GitHub | Support Ticket |
+| --- | --- | --- | --- |
+| **Channel.ParentSpace** | Team/Workspace ID | Organization/Repo | Organization |
+| **Channel** (container) | Slack Channel | Issue/PR | Ticket |
+| **ThreadID** | Thread timestamp | Issue/PR number | Ticket ID |
+| **Message** | Message | Comment/Review | Comment |
+| **User** | Slack User | GitHub User | Agent/Customer |
+
+**Implementation notes**:
+- **Slack messages** outside threads are treated as single-message threads
+- **GitHub Issues/PRs** are channels (with `ParentSpace` = repository); each Issue/PR is a single thread
+- **GitHub Discussions** are deferred (they're structurally more like Slack channels with nested comment threads)
+- **Support Tickets** are channels (with `ParentSpace` = organization/system)
+- **Slack DMs** are channels that can contain multiple threads
+- The `Channel.Type` field distinguishes between different container types
+
 ## Schema
 
 ### NormalizedMessage

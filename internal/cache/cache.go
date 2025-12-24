@@ -105,7 +105,7 @@ func SaveChannelInfo(teamID, channelID string, info interface{}) error {
 	}
 
 	filePath := filepath.Join(channelDir, "info.json")
-	
+
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal channel info: %w", err)
@@ -175,7 +175,7 @@ func SaveChannelsList(teamID string, channels interface{}) error {
 	}
 
 	filePath := filepath.Join(channelsDir, "_index.json")
-	
+
 	indexData := map[string]interface{}{
 		"fetched_at": time.Now(),
 		"channels":   channels,
@@ -197,4 +197,107 @@ func SaveChannelsList(teamID string, channels interface{}) error {
 	}
 
 	return nil
+}
+
+// DiscoverWorkspaces returns all cached Slack workspace IDs
+func DiscoverWorkspaces() ([]string, error) {
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return nil, err
+	}
+
+	workspacesDir := filepath.Join(cacheDir, "raw", "slack", "workspaces")
+
+	// Check if directory exists
+	if _, err := os.Stat(workspacesDir); os.IsNotExist(err) {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(workspacesDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read workspaces directory: %w", err)
+	}
+
+	var workspaceIDs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			workspaceIDs = append(workspaceIDs, entry.Name())
+		}
+	}
+
+	return workspaceIDs, nil
+}
+
+// WorkspaceUser represents the authenticated user for a workspace
+type WorkspaceUser struct {
+	UserID   string    `json:"user_id"`
+	UserName string    `json:"user_name"`
+	TeamID   string    `json:"team_id"`
+	TeamName string    `json:"team_name"`
+	CachedAt time.Time `json:"cached_at"`
+}
+
+// SaveWorkspaceUser saves authenticated user info for a workspace
+func SaveWorkspaceUser(teamID string, userID, userName, teamName string) error {
+	slackDir, err := RawSlackDir(teamID)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(slackDir, 0700); err != nil {
+		return fmt.Errorf("failed to create workspace directory: %w", err)
+	}
+
+	filePath := filepath.Join(slackDir, "user.json")
+
+	user := WorkspaceUser{
+		UserID:   userID,
+		UserName: userName,
+		TeamID:   teamID,
+		TeamName: teamName,
+		CachedAt: time.Now(),
+	}
+
+	data, err := json.MarshalIndent(user, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal user info: %w", err)
+	}
+
+	tempPath := filePath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write user info: %w", err)
+	}
+
+	if err := os.Rename(tempPath, filePath); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to rename user info file: %w", err)
+	}
+
+	return nil
+}
+
+// GetWorkspaceUser retrieves the authenticated user for a workspace
+func GetWorkspaceUser(teamID string) (*WorkspaceUser, error) {
+	slackDir, err := RawSlackDir(teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	filePath := filepath.Join(slackDir, "user.json")
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("no cached user info for workspace %s", teamID)
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user info: %w", err)
+	}
+
+	var user WorkspaceUser
+	if err := json.Unmarshal(data, &user); err != nil {
+		return nil, fmt.Errorf("failed to parse user info: %w", err)
+	}
+
+	return &user, nil
 }

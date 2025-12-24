@@ -880,12 +880,14 @@ mine <command> [subcommand] [flags]
 - `--source` - Filter by source (slack, github, email)
 - `--since` - Start date (YYYY-MM-DD or relative like "7d")
 - `--until` - End date
-- `--author` - Filter by author (user ID or "me")
+- `--author` - Filter by author (user ID or "me") - used in query commands like `messages`
 - `--channel` - Filter by channel/issue/thread
 - `--format` - Output format (json, jsonl, table)
 - `--output` - Output file (default: stdout)
 - `--verbose` - Verbose logging
 - `--config` - Config file path (default: ~/.threadmine/config.yaml)
+
+**Note**: Sender filtering during fetch operations (`mine fetch --sender`) is deferred to post-v1.0. Use `mine messages --author` for author-based filtering of cached messages.
 
 ## Success Criteria
 
@@ -912,13 +914,14 @@ The ThreadMine project will be considered successful when it meets the following
 
 ### Could Have (Future)
 1. Cross-platform support (Linux, Windows) - currently macOS-focused
-2. Web UI for browsing cached data
-3. Machine learning models for better classification
-4. Export to other formats (Markdown, HTML)
-5. Real-time monitoring mode
-6. Integration with more sources (Discord, Teams, Jira)
-7. Collaborative filtering recommendations
-8. Automatic summarization
+2. Sender filtering in fetch commands (`--sender` flag for fetch-time filtering)
+3. Web UI for browsing cached data
+4. Machine learning models for better classification
+5. Export to other formats (Markdown, HTML)
+6. Real-time monitoring mode
+7. Integration with more sources (Discord, Teams, Jira)
+8. Collaborative filtering recommendations
+9. Automatic summarization
 
 ## Out of Scope
 

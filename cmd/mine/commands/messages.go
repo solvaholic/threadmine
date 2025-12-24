@@ -2,11 +2,13 @@ package commands
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/solvaholic/threadmine/internal/cache"
 	"github.com/solvaholic/threadmine/internal/normalize"
 	"github.com/solvaholic/threadmine/internal/utils"
 	"github.com/spf13/cobra"
@@ -33,7 +35,7 @@ var messagesCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(messagesCmd)
 
-	messagesCmd.Flags().StringVarP(&msgAuthor, "author", "a", "", "Filter by author ID")
+	messagesCmd.Flags().StringVarP(&msgAuthor, "author", "a", "", "Filter by author ID or 'me' for authenticated user")
 	messagesCmd.Flags().StringVarP(&msgChannel, "channel", "c", "", "Filter by channel/issue")
 	messagesCmd.Flags().StringVarP(&msgWorkspace, "workspace", "w", "", "Filter by workspace/team ID")
 	messagesCmd.Flags().StringVarP(&msgSince, "since", "s", "", "Start date (e.g., '7d', '2025-12-15')")
@@ -64,6 +66,46 @@ func runMessages(cmd *cobra.Command, args []string) error {
 			OutputError("invalid until date format: %v", err)
 			return err
 		}
+	}
+
+	// Resolve "me" to user ID(s)
+	authorIDs := make(map[string]bool)
+	if msgAuthor == "me" {
+		// If workspace is specified, get just that user
+		if msgWorkspace != "" {
+			user, err := cache.GetWorkspaceUser(msgWorkspace)
+			if err != nil {
+				OutputError("failed to resolve 'me' for workspace %s: %v", msgWorkspace, err)
+				return err
+			}
+			// Construct universal ID: user_slack_{teamID}_{userID}
+			universalID := fmt.Sprintf("user_slack_%s_%s", user.TeamID, user.UserID)
+			authorIDs[universalID] = true
+		} else {
+			// Get all workspace user IDs
+			workspaceIDs, err := cache.DiscoverWorkspaces()
+			if err != nil {
+				OutputError("failed to discover workspaces: %v", err)
+				return err
+			}
+
+			for _, teamID := range workspaceIDs {
+				user, err := cache.GetWorkspaceUser(teamID)
+				if err != nil {
+					continue // Skip workspaces without cached user info
+				}
+				// Construct universal ID: user_slack_{teamID}_{userID}
+				universalID := fmt.Sprintf("user_slack_%s_%s", user.TeamID, user.UserID)
+				authorIDs[universalID] = true
+			}
+
+			if len(authorIDs) == 0 {
+				OutputError("no workspace user info found for 'me'")
+				return fmt.Errorf("no workspace user info found")
+			}
+		}
+	} else if msgAuthor != "" {
+		authorIDs[msgAuthor] = true
 	}
 
 	// Read messages from normalized storage
@@ -101,7 +143,7 @@ func runMessages(cmd *cobra.Command, args []string) error {
 			}
 
 			// Apply filters
-			if msgAuthor != "" && msg.Author.ID != msgAuthor {
+			if len(authorIDs) > 0 && !authorIDs[msg.Author.ID] {
 				continue
 			}
 			if msgChannel != "" && msg.Channel.ID != msgChannel {

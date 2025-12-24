@@ -1,8 +1,8 @@
 # Binaries
-graph-demo
-mine
-*.exe
-dist/
+/graph-demo
+/mine
+/*.exe
+/dist/
 
 # Go
 *.out

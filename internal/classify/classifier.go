@@ -9,9 +9,9 @@ import (
 
 // Classification represents a message classification with confidence score
 type Classification struct {
-	Type       string   `json:"type"`        // "question", "answer", "solution", "acknowledgment"
-	Confidence float64  `json:"confidence"`  // 0.0 to 1.0
-	Signals    []string `json:"signals"`     // What triggered this classification
+	Type       string   `json:"type"`       // "question", "answer", "solution", "acknowledgment"
+	Confidence float64  `json:"confidence"` // 0.0 to 1.0
+	Signals    []string `json:"signals"`    // What triggered this classification
 }
 
 // ClassifyMessage analyzes a message and returns all applicable classifications
@@ -139,7 +139,7 @@ func classifyAnswer(msg *normalize.NormalizedMessage, ctx *ThreadContext) *Class
 
 	// Don't classify the question author's own messages as answers (unless they answer themselves)
 	// For now, assume others' messages in a question thread are potential answers
-	
+
 	content := strings.ToLower(msg.Content)
 	var signals []string
 	confidence := 0.0
@@ -234,10 +234,10 @@ func classifySolution(msg *normalize.NormalizedMessage) *Classification {
 
 	// Instructions/steps (numbered or bullet points)
 	stepPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?m)^1\.|^1\)`),           // Numbered list starting with 1
-		regexp.MustCompile(`(?m)^- |^\* |^• `),        // Bullet points
-		regexp.MustCompile(`first.*then.*finally`),    // Sequential instructions
-		regexp.MustCompile(`step \d+`),                // "step 1", "step 2"
+		regexp.MustCompile(`(?m)^1\.|^1\)`),        // Numbered list starting with 1
+		regexp.MustCompile(`(?m)^- |^\* |^• `),     // Bullet points
+		regexp.MustCompile(`first.*then.*finally`), // Sequential instructions
+		regexp.MustCompile(`step \d+`),             // "step 1", "step 2"
 	}
 
 	for _, pattern := range stepPatterns {
@@ -250,7 +250,7 @@ func classifySolution(msg *normalize.NormalizedMessage) *Classification {
 
 	// Documentation/reference URLs
 	docPatterns := []string{
-		"docs.", "documentation", "/docs/", 
+		"docs.", "documentation", "/docs/",
 		"stackoverflow", "github.com",
 		"tutorial", "example", "guide",
 	}
@@ -293,33 +293,51 @@ func classifyAcknowledgment(msg *normalize.NormalizedMessage) *Classification {
 	var signals []string
 	confidence := 0.0
 
-	// Thank you phrases
-	thankPhrases := []string{
-		"thank", "thanks", "thx", "ty",
-		"appreciate", "grateful",
+	// Thank you phrases - use word boundaries to avoid false matches
+	thankPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\bthank`),
+		regexp.MustCompile(`\bthanks\b`),
+		regexp.MustCompile(`\bthx\b`),
+		regexp.MustCompile(`\bty\b`),
+		regexp.MustCompile(`\bappreciate`),
+		regexp.MustCompile(`\bgrateful\b`),
 	}
 
-	for _, phrase := range thankPhrases {
-		if strings.Contains(content, phrase) {
-			signals = append(signals, "thanks:"+phrase)
+	for i, pattern := range thankPatterns {
+		if pattern.MatchString(content) {
+			phraseName := []string{"thank", "thanks", "thx", "ty", "appreciate", "grateful"}[i]
+			signals = append(signals, "thanks:"+phraseName)
 			confidence += 0.3
 			break
 		}
 	}
 
-	// Success indicators
-	successPhrases := []string{
-		"worked", "works", "working",
-		"fixed", "solved", "resolved",
-		"that did it", "that worked", "that fixed",
-		"perfect", "exactly what i needed",
-		"this solved", "this fixed",
-		"got it working", "got it to work",
+	// Success indicators - use word boundaries and specific phrases
+	successPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\bworked\b`),
+		regexp.MustCompile(`\bworks\b`),
+		regexp.MustCompile(`(it'?s? working|now working|got it working)`),
+		regexp.MustCompile(`\bfixed\b`),
+		regexp.MustCompile(`\bsolved\b`),
+		regexp.MustCompile(`\bresolved\b`),
+		regexp.MustCompile(`that (did it|worked|fixed)`),
+		regexp.MustCompile(`exactly what i needed`),
+		regexp.MustCompile(`(this|that) (solved|fixed)`),
+		regexp.MustCompile(`got it (working|to work)`),
 	}
 
-	for _, phrase := range successPhrases {
-		if strings.Contains(content, phrase) {
-			signals = append(signals, "success:"+phrase)
+	successPhraseNames := []string{
+		"worked", "works", "working", "fixed", "solved", "resolved",
+		"that_did_it", "exactly_needed", "this_solved", "got_it_working",
+	}
+
+	for i, pattern := range successPatterns {
+		if pattern.MatchString(content) {
+			phraseName := "success"
+			if i < len(successPhraseNames) {
+				phraseName = successPhraseNames[i]
+			}
+			signals = append(signals, "success:"+phraseName)
 			confidence += 0.4
 			break
 		}
@@ -363,8 +381,15 @@ func classifyAcknowledgment(msg *normalize.NormalizedMessage) *Classification {
 		confidence = 1.0
 	}
 
-	// Minimum threshold (lower to catch simple emoji reactions)
+	// Minimum threshold
 	if confidence < 0.2 {
+		return nil
+	}
+
+	// For messages with only thanks signals, require reasonable length to avoid
+	// false positives on random substring matches
+	if confidence <= 0.3 && len(msg.Content) > 100 {
+		// Long messages with only weak acknowledgment signals are likely false positives
 		return nil
 	}
 

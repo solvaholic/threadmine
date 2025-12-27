@@ -3,6 +3,11 @@ module github.com/solvaholic/threadmine
 go 1.25.5
 
 require (
+	github.com/rneatherway/slack v0.0.0-20251202152516-e4fa895c1c51
+	github.com/spf13/cobra v1.10.2
+)
+
+require (
 	github.com/billgraziano/dpapi v0.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/godbus/dbus/v5 v5.0.6 // indirect
@@ -13,8 +18,6 @@ require (
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rneatherway/slack v0.0.0-20251202152516-e4fa895c1c51 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/mod v0.3.0 // indirect

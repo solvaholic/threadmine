@@ -7,6 +7,7 @@ import (
 
 	"github.com/solvaholic/threadmine/internal/cache"
 	"github.com/solvaholic/threadmine/internal/classify"
+	"github.com/solvaholic/threadmine/internal/github"
 	"github.com/solvaholic/threadmine/internal/graph"
 	"github.com/solvaholic/threadmine/internal/normalize"
 	"github.com/solvaholic/threadmine/internal/slack"
@@ -18,6 +19,8 @@ var (
 	fetchWorkspace string
 	fetchChannel   string
 	fetchSince     string
+	fetchOwner     string
+	fetchRepo      string
 )
 
 // fetchCmd represents the fetch command
@@ -35,15 +38,31 @@ var fetchSlackCmd = &cobra.Command{
 	RunE:  runFetchSlack,
 }
 
+// fetchGitHubCmd represents the fetch github command
+var fetchGitHubCmd = &cobra.Command{
+	Use:   "github",
+	Short: "Fetch data from GitHub",
+	Long:  `Fetch issues, pull requests, and comments from GitHub repositories using GitHub CLI.`,
+	RunE:  runFetchGitHub,
+}
+
 func init() {
 	rootCmd.AddCommand(fetchCmd)
 	fetchCmd.AddCommand(fetchSlackCmd)
+	fetchCmd.AddCommand(fetchGitHubCmd)
 
 	// Flags for fetch slack
 	fetchSlackCmd.Flags().StringVarP(&fetchWorkspace, "workspace", "w", "", "Slack workspace name or 'all' for all cached workspaces (required)")
 	fetchSlackCmd.Flags().StringVarP(&fetchChannel, "channel", "c", "", "Channel ID to fetch (default: first available)")
 	fetchSlackCmd.Flags().StringVarP(&fetchSince, "since", "s", "7d", "Fetch messages since (e.g., '7d', '2025-12-15')")
 	fetchSlackCmd.MarkFlagRequired("workspace")
+
+	// Flags for fetch github
+	fetchGitHubCmd.Flags().StringVarP(&fetchOwner, "owner", "o", "", "Repository owner (required)")
+	fetchGitHubCmd.Flags().StringVarP(&fetchRepo, "repo", "r", "", "Repository name (required)")
+	fetchGitHubCmd.Flags().StringVarP(&fetchSince, "since", "s", "30d", "Fetch issues/PRs updated since (e.g., '30d', '2025-12-01')")
+	fetchGitHubCmd.MarkFlagRequired("owner")
+	fetchGitHubCmd.MarkFlagRequired("repo")
 }
 
 func runFetchSlack(cmd *cobra.Command, args []string) error {
@@ -336,4 +355,258 @@ func fetchWorkspaceData(ctx context.Context, result *slack.AuthResult, oldest ti
 	}
 
 	return workspaceResult, len(messages), len(normalizedMessages), nil
+}
+
+func runFetchGitHub(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+
+	// Parse since date
+	var oldest time.Time
+	if len(fetchSince) > 0 {
+		var err error
+		oldest, err = utils.ParseSinceDate(fetchSince)
+		if err != nil {
+			OutputError("invalid date format: %v", err)
+			return err
+		}
+	}
+
+	// Authenticate with GitHub CLI
+	authResult, err := github.Authenticate()
+	if err != nil {
+		OutputError("GitHub authentication failed: %v", err)
+		return err
+	}
+
+	// Create client for the specified repository
+	client := github.NewClient(fetchOwner, fetchRepo)
+
+	// Fetch repository metadata
+	repo, err := client.GetRepository(ctx)
+	if err != nil {
+		OutputError("failed to fetch repository: %v", err)
+		return err
+	}
+
+	fetchedAt := time.Now()
+	var normalizedMessages []*normalize.NormalizedMessage
+
+	// Fetch issues
+	issues, err := client.GetIssues(ctx, oldest)
+	if err != nil {
+		OutputError("failed to fetch issues: %v", err)
+		return err
+	}
+
+	issueCount := len(issues)
+	issueCommentCount := 0
+
+	for _, issue := range issues {
+		// Normalize the issue itself
+		normalized, err := normalize.GitHubIssueToNormalized(&issue, fetchRepo, fetchOwner, fetchedAt)
+		if err != nil {
+			continue
+		}
+
+		if err := normalize.SaveNormalizedMessage(normalized); err != nil {
+			continue
+		}
+		normalizedMessages = append(normalizedMessages, normalized)
+
+		// Fetch and normalize issue comments
+		comments, err := client.GetIssueComments(ctx, issue.Number)
+		if err != nil {
+			continue
+		}
+
+		issueCommentCount += len(comments)
+
+		for _, comment := range comments {
+			normalizedComment, err := normalize.GitHubIssueCommentToNormalized(&comment, &issue, fetchRepo, fetchOwner, fetchedAt)
+			if err != nil {
+				continue
+			}
+
+			if err := normalize.SaveNormalizedMessage(normalizedComment); err != nil {
+				continue
+			}
+			normalizedMessages = append(normalizedMessages, normalizedComment)
+		}
+	}
+
+	// Fetch pull requests
+	prs, err := client.GetPullRequests(ctx, oldest)
+	if err != nil {
+		OutputError("failed to fetch pull requests: %v", err)
+		return err
+	}
+
+	prCount := len(prs)
+	prCommentCount := 0
+	prReviewCount := 0
+
+	for _, pr := range prs {
+		// Normalize the PR itself
+		normalized, err := normalize.GitHubPRToNormalized(&pr, fetchRepo, fetchOwner, fetchedAt)
+		if err != nil {
+			continue
+		}
+
+		if err := normalize.SaveNormalizedMessage(normalized); err != nil {
+			continue
+		}
+		normalizedMessages = append(normalizedMessages, normalized)
+
+		// Fetch and normalize PR comments
+		comments, err := client.GetPullRequestComments(ctx, pr.Number)
+		if err != nil {
+			continue
+		}
+
+		prCommentCount += len(comments)
+
+		for _, comment := range comments {
+			normalizedComment, err := normalize.GitHubPRCommentToNormalized(&comment, &pr, fetchRepo, fetchOwner, fetchedAt)
+			if err != nil {
+				continue
+			}
+
+			if err := normalize.SaveNormalizedMessage(normalizedComment); err != nil {
+				continue
+			}
+			normalizedMessages = append(normalizedMessages, normalizedComment)
+		}
+
+		// Fetch and normalize PR reviews
+		reviews, err := client.GetPullRequestReviews(ctx, pr.Number)
+		if err != nil {
+			continue
+		}
+
+		prReviewCount += len(reviews)
+
+		for _, review := range reviews {
+			normalizedReview, err := normalize.GitHubPRReviewToNormalized(&review, &pr, fetchRepo, fetchOwner, fetchedAt)
+			if err != nil {
+				continue
+			}
+
+			if err := normalize.SaveNormalizedMessage(normalizedReview); err != nil {
+				continue
+			}
+			normalizedMessages = append(normalizedMessages, normalizedReview)
+		}
+	}
+
+	// Classify messages
+	threadContextMap := make(map[string]*classify.ThreadContext)
+	for _, msg := range normalizedMessages {
+		hasQuestion := false
+		questionAuthor := ""
+		for _, m := range normalizedMessages {
+			if m.ThreadID == msg.ThreadID {
+				msgClassifications := classify.ClassifyMessage(m, nil)
+				for _, c := range msgClassifications {
+					if c.Type == "question" {
+						hasQuestion = true
+						questionAuthor = m.Author.ID
+						break
+					}
+				}
+			}
+		}
+
+		threadContextMap[msg.ID] = &classify.ThreadContext{
+			HasQuestion:    hasQuestion,
+			QuestionAuthor: questionAuthor,
+			IsThreadRoot:   msg.IsThreadRoot,
+		}
+	}
+
+	questionCount := 0
+	answerCount := 0
+	solutionCount := 0
+	acknowledgmentCount := 0
+
+	for _, msg := range normalizedMessages {
+		ctx := threadContextMap[msg.ID]
+		classifications := classify.ClassifyMessage(msg, ctx)
+
+		if len(classifications) > 0 {
+			for _, c := range classifications {
+				switch c.Type {
+				case "question":
+					questionCount++
+				case "answer":
+					answerCount++
+				case "solution":
+					solutionCount++
+				case "acknowledgment":
+					acknowledgmentCount++
+				}
+			}
+
+			classify.SaveClassifications(msg, classifications)
+		}
+	}
+
+	// Build reply graph
+	replyGraph := graph.BuildFromNormalizedMessages(normalizedMessages)
+	if err := graph.SaveReplyGraph(replyGraph); err != nil {
+		OutputError("failed to save reply graph: %v", err)
+		return err
+	}
+
+	graphStats := replyGraph.Stats()
+
+	// Build output
+	cacheDir, _ := cache.CacheDir()
+	normalizedDir, _ := normalize.NormalizedDir()
+	graphDir, _ := graph.GraphDir()
+	annotationsDir, _ := classify.AnnotationsDir()
+
+	result := map[string]interface{}{
+		"status": "success",
+		"repository": map[string]interface{}{
+			"owner":       fetchOwner,
+			"name":        fetchRepo,
+			"full_name":   repo.FullName,
+			"description": repo.Description,
+			"private":     repo.Private,
+		},
+		"user": map[string]string{
+			"username": authResult.User,
+		},
+		"issues": map[string]interface{}{
+			"count":    issueCount,
+			"comments": issueCommentCount,
+		},
+		"pull_requests": map[string]interface{}{
+			"count":    prCount,
+			"comments": prCommentCount,
+			"reviews":  prReviewCount,
+		},
+		"messages": map[string]interface{}{
+			"normalized": len(normalizedMessages),
+			"date_range": map[string]string{
+				"from": oldest.Format(time.RFC3339),
+				"to":   time.Now().Format(time.RFC3339),
+			},
+		},
+		"classifications": map[string]interface{}{
+			"questions":       questionCount,
+			"answers":         answerCount,
+			"solutions":       solutionCount,
+			"acknowledgments": acknowledgmentCount,
+		},
+		"graph": graphStats,
+		"storage": map[string]string{
+			"raw":         cacheDir,
+			"normalized":  normalizedDir,
+			"graph":       graphDir,
+			"annotations": annotationsDir,
+		},
+	}
+
+	return OutputJSON(result)
 }

@@ -167,16 +167,13 @@ func (c *Client) GetIssues(ctx context.Context, since time.Time) ([]Issue, error
 
 // FetchIssues fetches issues from GitHub API (direct, no caching)
 func (c *Client) FetchIssues(ctx context.Context, since time.Time) ([]Issue, error) {
-	args := []string{"api", "--paginate", fmt.Sprintf("repos/%s/%s/issues", c.owner, c.repo)}
-	
+	// Build URL with query parameters
+	url := fmt.Sprintf("repos/%s/%s/issues?state=all", c.owner, c.repo)
 	if !since.IsZero() {
-		args = append(args, "-f", fmt.Sprintf("since=%s", since.Format(time.RFC3339)))
+		url += fmt.Sprintf("&since=%s", since.Format(time.RFC3339))
 	}
-	
-	// Filter out pull requests (GitHub API returns both)
-	args = append(args, "-f", "state=all")
 
-	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd := exec.CommandContext(ctx, "gh", "api", "--paginate", url)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch issues: %w", err)
@@ -270,10 +267,10 @@ func (c *Client) GetPullRequests(ctx context.Context, since time.Time) ([]PullRe
 
 // FetchPullRequests fetches pull requests from GitHub API (direct, no caching)
 func (c *Client) FetchPullRequests(ctx context.Context, since time.Time) ([]PullRequest, error) {
-	args := []string{"api", "--paginate", fmt.Sprintf("repos/%s/%s/pulls", c.owner, c.repo)}
-	args = append(args, "-f", "state=all")
+	// Build URL with query parameters
+	url := fmt.Sprintf("repos/%s/%s/pulls?state=all", c.owner, c.repo)
 
-	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd := exec.CommandContext(ctx, "gh", "api", "--paginate", url)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pull requests: %w", err)

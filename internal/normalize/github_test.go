@@ -269,6 +269,8 @@ func TestExtractGitHubCodeBlocks(t *testing.T) {
 		{"```\nno language\n```", 1, ""},
 		{"No code blocks", 0, ""},
 		{"```python\nprint('hello')\n```\n```javascript\nconsole.log('hi')\n```", 2, "python"},
+		{"```JavaScript\nconsole.log('mixed case')```", 1, "JavaScript"},
+		{"```TypeScript\nconst x: string = 'test'```", 1, "TypeScript"},
 	}
 
 	for _, tt := range tests {

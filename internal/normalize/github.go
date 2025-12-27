@@ -15,7 +15,8 @@ var (
 	// Match @username but not in email addresses (require word boundary before @)
 	githubMentionPattern = regexp.MustCompile(`(?:^|[^a-zA-Z0-9.])@([a-zA-Z0-9][-a-zA-Z0-9]*)`)
 	githubURLPattern     = regexp.MustCompile(`https?://[^\s\)]+`)
-	githubCodeBlockPattern = regexp.MustCompile("```([a-z]*)\n([^`]+)```")
+	// Match code blocks with optional language (case-insensitive) and optional newline
+	githubCodeBlockPattern = regexp.MustCompile("(?s)```([a-zA-Z0-9_+-]*)\n?(.+?)```")
 	githubInlineCodePattern = regexp.MustCompile("`([^`]+)`")
 )
 

@@ -114,7 +114,7 @@ func runMessages(cmd *cobra.Command, args []string) error {
 	// Read from by_source files (most efficient for full scans)
 	messagesDir := filepath.Join(normalizedDir, "messages", "by_source")
 
-	sources := []string{"slack.jsonl"}
+	sources := []string{"slack.jsonl", "github.jsonl"}
 	if msgSource != "" {
 		sources = []string{msgSource + ".jsonl"}
 	}

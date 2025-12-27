@@ -5,7 +5,7 @@ Extract and analyze multi-platform conversations, with zero admin overhead
 
 ThreadMine (`mine` CLI) is a Go-based tool that:
 
-- **Extracts conversations** from Slack, GitHub, and email using local credentials
+- **Extracts conversations** from Slack, GitHub issues/PRs, and email using local credentials
 - **Caches data** efficiently to minimize API calls and respect rate limits
 - **Normalizes messages** across platforms into a common schema
 - **Builds reply graphs** to track conversation threads and relationships
@@ -22,11 +22,11 @@ ThreadMine (`mine` CLI) is a Go-based tool that:
 6. ✅ Classify messages as questions or answers using heuristics
 7. ✅ Output valid JSON for all commands
 
-**Next Steps (v1.0):**
-- Support GitHub issues and PRs
-- Support email (IMAP and mbox)
-- Cross-source identity resolution
-- Full graph analysis and solution quality assessment
+✅ **v1.0 Progress:**
+- ✅ Support GitHub issues and PRs
+- ⏳ Support email (IMAP and mbox)
+- ⏳ Cross-source identity resolution
+- ⏳ Full graph analysis and solution quality assessment
 
 ## Quick Start
 
@@ -37,8 +37,14 @@ go build -o mine ./cmd/mine
 # Fetch Slack messages from a workspace
 ./mine fetch slack --workspace solvahol
 
-# Query messages
-./mine messages --source slack --since 2025-12-20
+# Fetch GitHub issues and PRs from a repository
+./mine fetch github --owner solvaholic --repo threadmine
+
+# Query messages from all sources
+./mine messages --since 2025-12-20
+
+# Query messages from a specific source
+./mine messages --source github --since 7d
 
 # Search for specific content
 ./mine messages --search "error" --source slack
@@ -54,6 +60,7 @@ go build -o mine ./cmd/mine
 ### Available Commands
 
 - `mine fetch slack` - Fetch data from Slack workspaces
+- `mine fetch github` - Fetch data from GitHub repositories
 - `mine messages` - Query normalized messages with filters
 - `mine cache info` - Show cache statistics and storage info
 
@@ -118,6 +125,7 @@ See [`internal/graph/README.md`](internal/graph/README.md) for details.
 ## Documentation
 
 - [SPEC.md](docs/SPEC.md) - Complete project specification
+- [GITHUB.md](docs/GITHUB.md) - GitHub integration guide
 - [internal/normalize/README.md](internal/normalize/README.md) - Normalization layer
 - [internal/graph/README.md](internal/graph/README.md) - Reply graph implementation
 

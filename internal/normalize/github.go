@@ -12,7 +12,8 @@ import (
 
 var (
 	// GitHub Markdown patterns
-	githubMentionPattern = regexp.MustCompile(`@([a-zA-Z0-9][-a-zA-Z0-9]*)`)
+	// Match @username but not in email addresses (require word boundary before @)
+	githubMentionPattern = regexp.MustCompile(`(?:^|[^a-zA-Z0-9.])@([a-zA-Z0-9][-a-zA-Z0-9]*)`)
 	githubURLPattern     = regexp.MustCompile(`https?://[^\s\)]+`)
 	githubCodeBlockPattern = regexp.MustCompile("```([a-z]*)\n([^`]+)```")
 	githubInlineCodePattern = regexp.MustCompile("`([^`]+)`")

@@ -49,7 +49,8 @@ ThreadMine (`mine` CLI) is a Go-based tool for extracting, caching, and analyzin
 
 ## Development Workflow
 
-- **Test harnesses**: It's acceptable to use `cmd/mine/main.go` as a temporary test script during feature development
+- **Main entry point**: `cmd/mine/main.go` is the CLI entry point that calls `commands.Execute()`
+- **Test harnesses**: Other test scripts in `cmd/` directories (like `cmd/test-cache/`, `cmd/classify-demo/`) are for temporary testing during development
 - **Incremental implementation**: Build features one layer at a time (raw → normalized → analysis)
 - **Verify cache structure**: Always check the filesystem output matches the SPEC directory structure
 - **Check permissions**: Verify 0600/0700 permissions on created files/directories

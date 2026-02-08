@@ -149,10 +149,30 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 	// Build search query for Slack
 	queryParts := []string{}
 	if slackUser != "" {
-		queryParts = append(queryParts, fmt.Sprintf("from:@%s", slackUser))
+		// Don't add prefix if user already provided it
+		if !strings.HasPrefix(slackUser, "@") {
+			queryParts = append(queryParts, fmt.Sprintf("from:@%s", slackUser))
+		} else {
+			queryParts = append(queryParts, fmt.Sprintf("from:%s", slackUser))
+		}
 	}
 	if slackChannel != "" {
-		queryParts = append(queryParts, fmt.Sprintf("in:#%s", slackChannel))
+		// Handle different channel formats
+		if strings.HasPrefix(slackChannel, "C") || strings.HasPrefix(slackChannel, "D") {
+			// This is a channel ID - we'll need to look it up
+			// For now, use it directly and let Slack handle it
+			queryParts = append(queryParts, fmt.Sprintf("in:%s", slackChannel))
+		} else if strings.HasPrefix(slackChannel, "@") {
+			// User already provided @username for DM
+			queryParts = append(queryParts, fmt.Sprintf("in:%s", slackChannel))
+		} else if strings.HasPrefix(slackChannel, "#") {
+			// User already provided #channel
+			queryParts = append(queryParts, fmt.Sprintf("in:%s", slackChannel))
+		} else {
+			// Bare channel name - check if it matches authenticated user (DM case)
+			// For now, assume it's a channel and add #
+			queryParts = append(queryParts, fmt.Sprintf("in:#%s", slackChannel))
+		}
 	}
 	if slackSearch != "" {
 		queryParts = append(queryParts, slackSearch)
@@ -250,7 +270,7 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 
 			// Store all messages in thread
 			for _, msg := range threadMessages {
-				if err := storeSlackMessage(database, msg, authResult.TeamID, result.Channel.ID); err != nil {
+				if err := storeSlackMessage(database, msg, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
 					fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store message: %v\n", err)
 					continue
 				}
@@ -261,7 +281,7 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 			threadCount++
 		} else if result.ThreadTS == "" {
 			// Single message, not part of a thread
-			if err := storeSlackMessage(database, result, authResult.TeamID, result.Channel.ID); err != nil {
+			if err := storeSlackMessage(database, result, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store message: %v\n", err)
 				continue
 			}
@@ -277,19 +297,66 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 }
 
 // storeSlackMessage stores a Slack message (raw + normalized) in the database
-func storeSlackMessage(database *db.DB, msg interface{}, teamID, channelID string) error {
+func storeSlackMessage(database *db.DB, msg interface{}, teamID, channelID string, channel *slack.Channel) error {
 	// Extract message details based on type
-	var msgID, timestamp string
+	var msgID, timestamp, userID, username string
 
 	switch m := msg.(type) {
 	case slack.SearchResult:
 		timestamp = m.Timestamp
+		userID = m.User
+		username = m.Username
 		msgID = fmt.Sprintf("msg_slack_%s_%s", channelID, timestamp)
 	case slack.ThreadMessage:
 		timestamp = m.Timestamp
+		userID = m.User
+		username = "" // ThreadMessage doesn't have username field
 		msgID = fmt.Sprintf("msg_slack_%s_%s", channelID, timestamp)
 	default:
 		return fmt.Errorf("unsupported message type: %T", msg)
+	}
+
+	// Store user info if we have it
+	if userID != "" {
+		user := &db.User{
+			ID:          fmt.Sprintf("user_slack_%s", userID),
+			SourceType:  "slack",
+			SourceID:    userID,
+			FetchedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		if username != "" {
+			user.DisplayName = &username
+		}
+		// Save user (will upsert)
+		database.SaveUser(user)
+	}
+
+	// Store channel info
+	if channel != nil {
+		chanName := channel.Name
+		displayName := "#" + channel.Name
+		chanType := "channel"
+		if !channel.IsChannel {
+			chanType = "dm"
+			displayName = channel.Name // DMs don't get # prefix
+		}
+		workspaceID := fmt.Sprintf("ws_slack_%s", teamID)
+
+		dbChannel := &db.Channel{
+			ID:          fmt.Sprintf("chan_slack_%s", channelID),
+			SourceType:  "slack",
+			SourceID:    channelID,
+			WorkspaceID: &workspaceID,
+			Name:        chanName,
+			DisplayName: &displayName,
+			Type:        &chanType,
+			IsPrivate:   channel.IsPrivate,
+			ParentSpace: &workspaceID,
+			FetchedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		database.SaveChannel(dbChannel)
 	}
 
 	// Store raw message

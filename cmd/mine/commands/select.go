@@ -165,7 +165,69 @@ func outputTable(messages []*db.Message) error {
 	fmt.Fprintf(w, "TIMESTAMP\tAUTHOR\tCHANNEL\tCONTENT\n")
 	fmt.Fprintf(w, "---------\t------\t-------\t-------\n")
 
+	// Open database to look up names
+	dbPathResolved := dbPath
+	if dbPathResolved == "" {
+		dbPathResolved = db.DefaultDBPath()
+	}
+	database, err := db.Open(dbPathResolved)
+	if err != nil {
+		// If we can't open database, fall back to showing IDs
+		for _, msg := range messages {
+			content := msg.Content
+			if len(content) > 60 {
+				content = content[:57] + "..."
+			}
+			content = strings.ReplaceAll(content, "\n", " ")
+
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				msg.Timestamp.Format("2006-01-02 15:04"),
+				msg.AuthorID,
+				msg.ChannelID,
+				content,
+			)
+		}
+		return nil
+	}
+	defer database.Close()
+
+	// Cache for looked-up names
+	userNames := make(map[string]string)
+	channelNames := make(map[string]string)
+
 	for _, msg := range messages {
+		// Look up author name
+		authorName := msg.AuthorID
+		if cached, ok := userNames[msg.AuthorID]; ok {
+			authorName = cached
+		} else {
+			user, err := database.GetUser(msg.AuthorID)
+			if err == nil && user != nil {
+				if user.DisplayName != nil && *user.DisplayName != "" {
+					authorName = *user.DisplayName
+				} else if user.RealName != nil && *user.RealName != "" {
+					authorName = *user.RealName
+				}
+				userNames[msg.AuthorID] = authorName
+			}
+		}
+
+		// Look up channel name
+		channelName := msg.ChannelID
+		if cached, ok := channelNames[msg.ChannelID]; ok {
+			channelName = cached
+		} else {
+			channel, err := database.GetChannel(msg.ChannelID)
+			if err == nil && channel != nil {
+				if channel.DisplayName != nil && *channel.DisplayName != "" {
+					channelName = *channel.DisplayName
+				} else {
+					channelName = channel.Name
+				}
+				channelNames[msg.ChannelID] = channelName
+			}
+		}
+
 		// Truncate content for display
 		content := msg.Content
 		if len(content) > 60 {
@@ -175,8 +237,8 @@ func outputTable(messages []*db.Message) error {
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			msg.Timestamp.Format("2006-01-02 15:04"),
-			msg.AuthorID,
-			msg.ChannelID,
+			authorName,
+			channelName,
 			content,
 		)
 	}

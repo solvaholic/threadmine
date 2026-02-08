@@ -71,6 +71,134 @@ func Authenticate(team string) (*AuthResult, error) {
 	}, nil
 }
 
+// SearchResult represents a Slack search result
+type SearchResult struct {
+	Type      string `json:"type"`
+	Channel   Channel `json:"channel"`
+	User      string `json:"user"`
+	Username  string `json:"username"`
+	Text      string `json:"text"`
+	Timestamp string `json:"ts"`
+	ThreadTS  string `json:"thread_ts,omitempty"`
+	Permalink string `json:"permalink"`
+}
+
+// SearchResponse represents the response from search.messages
+type SearchResponse struct {
+	OK      bool `json:"ok"`
+	Query   string `json:"query"`
+	Messages struct {
+		Total   int `json:"total"`
+		Matches []SearchResult `json:"matches"`
+	} `json:"messages"`
+	Error string `json:"error"`
+}
+
+// SearchMessages searches for messages using the Slack search API
+func (c *Client) SearchMessages(ctx context.Context, query string, count int) (*SearchResponse, error) {
+	params := map[string]string{
+		"query": query,
+		"count": fmt.Sprintf("%d", count),
+		"sort": "timestamp",
+		"sort_dir": "desc",
+	}
+
+	bs, err := c.client.API(ctx, "GET", "search.messages", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search messages: %w", err)
+	}
+
+	var response SearchResponse
+	if err := json.Unmarshal(bs, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	if !response.OK {
+		return nil, fmt.Errorf("Slack API error: %s", response.Error)
+	}
+
+	return &response, nil
+}
+
+// ThreadMessage represents a message in a thread
+type ThreadMessage struct {
+	Type      string `json:"type"`
+	User      string `json:"user"`
+	Text      string `json:"text"`
+	Timestamp string `json:"ts"`
+	ThreadTS  string `json:"thread_ts,omitempty"`
+	ParentUserID string `json:"parent_user_id,omitempty"`
+}
+
+// GetThreadReplies fetches all replies in a thread
+func (c *Client) GetThreadReplies(ctx context.Context, channelID, threadTS string) ([]ThreadMessage, error) {
+	params := map[string]string{
+		"channel": channelID,
+		"ts": threadTS,
+		"limit": "1000",
+	}
+
+	bs, err := c.client.API(ctx, "GET", "conversations.replies", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get thread replies: %w", err)
+	}
+
+	var response struct {
+		OK       bool            `json:"ok"`
+		Messages []ThreadMessage `json:"messages"`
+		Error    string          `json:"error"`
+	}
+
+	if err := json.Unmarshal(bs, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse thread replies: %w", err)
+	}
+
+	if !response.OK {
+		return nil, fmt.Errorf("Slack API error: %s", response.Error)
+	}
+
+	return response.Messages, nil
+}
+
+// GetUserInfo fetches user profile information
+func (c *Client) GetUserInfo(ctx context.Context, userID string) (*UserInfo, error) {
+	params := map[string]string{
+		"user": userID,
+	}
+
+	bs, err := c.client.API(ctx, "GET", "users.info", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user info: %w", err)
+	}
+
+	var response struct {
+		OK    bool     `json:"ok"`
+		User  UserInfo `json:"user"`
+		Error string   `json:"error"`
+	}
+
+	if err := json.Unmarshal(bs, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse user info: %w", err)
+	}
+
+	if !response.OK {
+		return nil, fmt.Errorf("Slack API error: %s", response.Error)
+	}
+
+	return &response.User, nil
+}
+
+// UserInfo represents Slack user information
+type UserInfo struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	RealName string `json:"real_name"`
+	Profile  struct {
+		Email     string `json:"email"`
+		Image192  string `json:"image_192"`
+	} `json:"profile"`
+}
+
 // Channel represents a Slack channel
 type Channel struct {
 	ID          string `json:"id"`

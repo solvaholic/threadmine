@@ -9,20 +9,22 @@ import (
 )
 
 var (
-	// Global format flag
+	// Global flags
 	outputFormat string
+	dbPath       string
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "mine",
-	Short: "Extract and analyze multi-platform conversations",
-	Long: `ThreadMine (mine) is a CLI tool for extracting, caching, and analyzing 
-conversations across Slack, GitHub, and email.
+	Short: "Search and analyze conversations across platforms",
+	Long: `ThreadMine (mine) searches and analyzes conversations from Slack, GitHub, and email.
 
-It provides a unified interface for working with messages from multiple 
-communication platforms, normalizing heterogeneous data sources into a 
-common schema for cross-platform analysis and graph-based insights.`,
+The tool has two main modes:
+  - fetch: Search and retrieve messages from upstream sources (Slack, GitHub, etc.)
+  - select: Query and analyze locally cached messages
+
+All data is stored in a local SQLite database for fast querying and analysis.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -35,6 +37,7 @@ func Execute() error {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "json", "Output format (json, jsonl, table)")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Database path (default: ~/.threadmine/threadmine.db)")
 }
 
 // OutputJSON writes JSON to stdout with optional pretty printing

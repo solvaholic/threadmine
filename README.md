@@ -1,135 +1,214 @@
-# threadmine
-Extract and analyze multi-platform conversations, with zero admin overhead
+# ThreadMine
 
-## Features
+Search and analyze conversations across Slack, GitHub, and email - no admin required.
 
-ThreadMine (`mine` CLI) is a Go-based tool that:
+## Overview
 
-- **Extracts conversations** from Slack, GitHub issues/PRs, and email using local credentials
-- **Caches data** efficiently to minimize API calls and respect rate limits
-- **Normalizes messages** across platforms into a common schema
-- **Builds reply graphs** to track conversation threads and relationships
-- **Classifies messages** using heuristics to identify questions, answers, solutions, and acknowledgments
+ThreadMine (`mine`) is a command-line tool that searches conversations from multiple platforms, stores them locally in SQLite, and provides powerful query capabilities for analysis.
 
-## Current Status
-
-✅ **MVP Steps Completed:**
-1. ✅ Authenticate with Slack using browser cookies
-2. ✅ Fetch and cache messages from Slack channels
-3. ✅ Normalize Slack messages to common schema
-4. ✅ Build basic message reply graph
-5. ✅ Implement cache-aside pattern for message retrieval
-6. ✅ Classify messages as questions or answers using heuristics
-7. ✅ Output valid JSON for all commands
-
-✅ **v1.0 Progress:**
-- ✅ Support GitHub issues and PRs
-- ⏳ Support email (IMAP and mbox)
-- ⏳ Cross-source identity resolution
-- ⏳ Full graph analysis and solution quality assessment
+**Two-mode architecture:**
+- **Fetch**: Search upstream sources (Slack, GitHub, etc.) and retrieve complete threads
+- **Select**: Query and analyze locally cached data
 
 ## Quick Start
 
 ```bash
-# Build the tool
+# Build
 go build -o mine ./cmd/mine
 
-# Fetch Slack messages from a workspace
-./mine fetch slack --workspace solvahol
+# Fetch from Slack (search-based)
+./mine fetch slack --workspace myteam --user alice --since 7d
+./mine fetch slack --workspace myteam --search "kubernetes" --since 30d
 
-# Fetch GitHub issues and PRs from a repository
-./mine fetch github --owner solvaholic --repo threadmine
+# Fetch from GitHub (search-based)
+./mine fetch github --repo org/repo --label bug --since 30d
+./mine fetch github --repo org/repo --author alice --type pr
 
-# Query messages from all sources
-./mine messages --since 2025-12-20
+# Query local data
+./mine select --author alice --since 7d
+./mine select --search "error" --format table
+./mine select --thread thread_123 --format graph
 
-# Query messages from a specific source
-./mine messages --source github --since 7d
-
-# Search for specific content
-./mine messages --search "error" --source slack
-
-# View cache information
-./mine cache info
-
-# Get help for any command
+# Help
 ./mine --help
 ./mine fetch --help
+./mine select --help
 ```
 
-### Available Commands
+## Key Features
 
-- `mine fetch slack` - Fetch data from Slack workspaces
-- `mine fetch github` - Fetch data from GitHub repositories
-- `mine messages` - Query normalized messages with filters
-- `mine cache info` - Show cache statistics and storage info
-
-All commands output valid JSON by default. Use `--format json` (default), `jsonl`, or `table` for different output formats.
+- **Search-first**: Uses source search APIs (Slack `search.messages`, GitHub `/search/issues`)
+- **Complete threads**: Always fetches entire conversation threads, not just individual messages
+- **SQLite storage**: Fast queries with FTS5 full-text search
+- **Rate limiting**: Self-limits to 1/2 or 1/3 of API rate limits to avoid abuse
+- **Multiple formats**: JSON (default), JSONL (streaming), table (human-readable), graph (visualization)
+- **Cross-platform**: Unified schema across Slack, GitHub, and email (planned)
 
 ## Architecture
 
-ThreadMine uses a three-layer architecture:
+### Two-Mode Design
+
+1. **Fetch Mode**: Search upstream sources → Retrieve complete threads → Store in database
+2. **Select Mode**: Query database → Apply filters → Output results
+
+### Three-Layer Data Model
 
 ```
-Raw Layer (source-specific formats)
+Raw Layer (source-specific JSON in database)
     ↓
 Normalized Layer (common schema)
     ↓
-Analysis Layer (annotations, graph, insights)
+Analysis Layer (classifications, relationships)
 ```
 
-### Data Storage
+### Storage
 
-All data is stored in `~/.threadmine/`:
+All data stored in `~/.threadmine/threadmine.db` (SQLite):
+- Raw messages as received from APIs
+- Normalized messages in common schema
+- User profiles and identity mappings
+- Classifications and annotations
+- Rate limiting state
 
-- **`raw/`** - Source-specific API responses (JSON)
-- **`normalized/`** - Common schema messages (JSON/JSONL)
-- **`graph/`** - Reply graphs and thread structures (JSON)
-- **`annotations/`** - Message classifications and analysis (JSON)
+## Command Reference
 
-### Message Classification
+### Fetch Commands
 
-Heuristic-based classification identifies:
+```bash
+# Slack
+mine fetch slack --workspace TEAM --user alice --channel general --since 7d
+mine fetch slack --workspace TEAM --search "kubernetes" --since 30d
 
-- **Questions** - Question marks, help-seeking phrases, question starters
-- **Answers** - Responses in question threads with answer indicators
-- **Solutions** - Code blocks, step-by-step instructions, documentation links
-- **Acknowledgments** - Thanks, success confirmations, positive reactions
+# GitHub
+mine fetch github --repo org/repo --label bug --since 30d
+mine fetch github --repo org/repo --author alice --type pr --since 7d
+mine fetch github --repo org/repo --reviewer bob --type pr
+```
 
-Each classification includes confidence scores (0.0-1.0) and signals that triggered it.
+### Select Commands
 
-See `internal/classify/` for implementation.
+```bash
+# Filter by author and time
+mine select --author alice --since 7d
 
-### Cache-Aside Pattern
+# Full-text search
+mine select --search "kubernetes"
 
-ThreadMine implements efficient caching:
+# Multi-participant threads
+mine select --author alice --author bob --author charlie
 
-- **Check cache first** - Reads from `~/.threadmine/raw/` before API calls
-- **Fetch on miss** - Only calls API when data not cached or stale
-- **Automatic storage** - Caches API responses transparently
-- **Performance** - 7-8x faster on cache hits (~160μs vs ~1.2ms)
+# Filter by source
+mine select --source slack --since 30d
+mine select --source github --search "bug"
 
-See `internal/slack/client.go` `GetMessages()` for implementation.
+# Output formats
+mine select --search "error" --format table
+mine select --thread thread_123 --format graph
+mine select --author alice --since 30d --format jsonl | jq '.content'
 
-### Reply Graph
+# Pagination
+mine select --search "foo" --limit 50 --offset 100
+```
 
-The graph package tracks message relationships:
+## Output Formats
 
-- **Nodes**: Each message with metadata
-- **Adjacency List**: Parent → children mappings
-- **Thread Roots**: Top-level messages
-- **Statistics**: Graph metrics and analysis
+### JSON (default)
+```json
+[
+  {
+    "id": "msg_slack_C123_1234567890.123456",
+    "source_type": "slack",
+    "timestamp": "2026-02-07T10:30:00Z",
+    "author_id": "user_slack_U123",
+    "content": "How do I configure rate limiting?"
+  }
+]
+```
 
-See [`internal/graph/README.md`](internal/graph/README.md) for details.
+### JSONL (streaming)
+One message per line, pipe-friendly:
+```bash
+mine select --search "error" --format jsonl | jq '.content'
+```
+
+### Table (human-readable)
+```
+TIMESTAMP           AUTHOR        CHANNEL    CONTENT
+2026-02-07 10:30   user_alice    general    How do I configure...
+2026-02-07 10:35   user_bob      general    Check the docs at...
+```
+
+### Graph (visualization)
+```json
+{
+  "nodes": [{"id": "msg_123", "content": "...", "timestamp": "..."}],
+  "edges": [{"from": "msg_124", "to": "msg_123", "type": "reply_to"}]
+}
+```
+
+## Examples
+
+### Find your recent questions
+```bash
+# Fetch your Slack messages
+mine fetch slack --workspace myteam --user me --since 7d
+
+# Query with classification (when implemented)
+mine select --author user_slack_U123 --since 7d | \
+  jq '.[] | select(.classifications[]?.type == "question")'
+```
+
+### Track GitHub issue discussion
+```bash
+# Fetch issues with keyword
+mine fetch github --repo org/repo --search "authentication" --since 30d
+
+# View as table
+mine select --search "authentication" --source github --format table
+```
+
+### Analyze multi-user conversations
+```bash
+# Fetch from multiple sources
+mine fetch slack --workspace myteam --channel engineering --since 14d
+mine fetch github --repo org/repo --since 14d
+
+# Find conversations between specific users
+mine select --author alice --author bob --format graph > conversation.json
+```
+
+## Current Status
+
+**Completed:**
+- ✅ SQLite schema and database layer
+- ✅ Command structure (fetch/select)
+- ✅ Full-text search (FTS5)
+- ✅ Rate limiting framework
+
+**In Progress:**
+- 🚧 Slack search API integration
+- 🚧 GitHub search API integration
+- 🚧 Complete thread fetching
+
+**Planned:**
+- 📋 Message classification
+- 📋 Identity resolution
+- 📋 Email support
+- 📋 GitHub Discussions
 
 ## Documentation
 
-- [SPEC.md](docs/SPEC.md) - Complete project specification
-- [GITHUB.md](docs/GITHUB.md) - GitHub integration guide
-- [internal/normalize/README.md](internal/normalize/README.md) - Normalization layer
-- [internal/graph/README.md](internal/graph/README.md) - Reply graph implementation
+- [docs/SPEC.md](docs/SPEC.md) - Complete specification (v2.0)
+- [internal/db/schema.sql](internal/db/schema.sql) - Database schema
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - Development guide
+
+## Requirements
+
+- Go 1.25+
+- SQLite (via `github.com/mattn/go-sqlite3`)
+- Slack desktop app (for cookie-based auth)
+- GitHub CLI (`gh`) for GitHub authentication
 
 ## License
 
 MIT
-

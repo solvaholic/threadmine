@@ -27,6 +27,15 @@ Examples:
   # Select threads with multiple participants
   mine select --author alice --author bob --author charlie
 
+  # Select messages that look like questions
+  mine select --author alice --is-question
+
+  # Select messages with code blocks
+  mine select --has-code --since 7d
+
+  # Combine filters
+  mine select --author alice --is-question --has-code --since 30d
+
 Output formats:
   - json: Normalized messages with annotations (default, for tools)
   - jsonl: One message per line (for streaming/piping)
@@ -45,6 +54,12 @@ var (
 	selectThreadID string
 	selectLimit    int
 	selectOffset   int
+
+	// Enrichment filters
+	selectIsQuestion bool
+	selectHasCode    bool
+	selectHasLinks   bool
+	selectHasQuotes  bool
 )
 
 func init() {
@@ -59,6 +74,12 @@ func init() {
 	selectCmd.Flags().StringVar(&selectThreadID, "thread", "", "Filter by thread ID")
 	selectCmd.Flags().IntVar(&selectLimit, "limit", 100, "Maximum number of results")
 	selectCmd.Flags().IntVar(&selectOffset, "offset", 0, "Offset for pagination")
+
+	// Enrichment filters
+	selectCmd.Flags().BoolVar(&selectIsQuestion, "is-question", false, "Filter to messages that look like questions")
+	selectCmd.Flags().BoolVar(&selectHasCode, "has-code", false, "Filter to messages containing code blocks")
+	selectCmd.Flags().BoolVar(&selectHasLinks, "has-links", false, "Filter to messages containing URLs")
+	selectCmd.Flags().BoolVar(&selectHasQuotes, "has-quotes", false, "Filter to messages containing quote blocks")
 }
 
 func runSelect(cmd *cobra.Command, args []string) error {
@@ -146,6 +167,20 @@ func runSelect(cmd *cobra.Command, args []string) error {
 	// Handle search
 	if selectSearch != "" {
 		opts.SearchText = &selectSearch
+	}
+
+	// Handle enrichment filters (only if explicitly set)
+	if cmd.Flags().Changed("is-question") {
+		opts.IsQuestion = &selectIsQuestion
+	}
+	if cmd.Flags().Changed("has-code") {
+		opts.HasCode = &selectHasCode
+	}
+	if cmd.Flags().Changed("has-links") {
+		opts.HasLinks = &selectHasLinks
+	}
+	if cmd.Flags().Changed("has-quotes") {
+		opts.HasQuotes = &selectHasQuotes
 	}
 
 	// Execute query

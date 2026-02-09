@@ -221,9 +221,14 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
   - Character and word counts
   - Quote block detection (markdown-style '>' quotes)
   - Automatic enrichment during message fetch
+- ✅ Select command enrichment filters
+  - --is-question: Filter to messages that look like questions
+  - --has-code: Filter to messages containing code blocks
+  - --has-links: Filter to messages containing URLs
+  - --has-quotes: Filter to messages containing quote blocks
 
 ### In Progress
-- 🔨 Select command enrichment filters (--is-question, --has-code, etc.)
+- 🔨 (No active work items)
 
 ### Planned
 - 📋 Cross-platform identity resolution (email-based matching)
@@ -286,7 +291,7 @@ mine select --format jsonl | jq '.content'
 # Fetch your recent Slack messages with threads
 mine fetch slack --workspace myteam --user me --since 7d --threads
 
-# Find questions you asked (enrichment filters coming soon)
+# Find questions you asked using enrichment filter
 mine select --author user_slack_U123 --since 7d --is-question
 ```
 

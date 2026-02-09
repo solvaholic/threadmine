@@ -103,6 +103,12 @@ mine select --author alice --author bob --author charlie
 mine select --source slack --since 30d
 mine select --source github --search "bug"
 
+# Enrichment filters
+mine select --is-question --author alice --since 7d
+mine select --has-code --search "implementation"
+mine select --has-links --since 30d
+mine select --has-quotes --source slack
+
 # Output formats
 mine select --search "error" --format table
 mine select --thread thread_123 --format graph
@@ -155,7 +161,7 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 # Fetch your Slack messages with threads
 mine fetch slack --workspace myteam --user me --since 7d --threads
 
-# Query for questions (enrichment filters coming soon)
+# Query for questions using enrichment filter
 mine select --author user_slack_U123 --since 7d --is-question
 ```
 
@@ -194,9 +200,13 @@ mine select --author alice --author bob --format graph > conversation.json
   - Code block extraction (fenced, inline, HTML)
   - URL extraction
   - Automatic enrichment during fetch
+- ✅ Select command enrichment filters
+  - --is-question: Filter to messages that look like questions
+  - --has-code: Filter to messages containing code blocks
+  - --has-links: Filter to messages containing URLs
+  - --has-quotes: Filter to messages containing quote blocks
 
 **In Progress:**
-- 🔨 Select command enrichment filters (--is-question, --has-code, etc.)
 
 **Planned:**
 - 📋 FTS5 full-text search (requires sqlite3 build with FTS5)

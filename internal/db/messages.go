@@ -146,52 +146,84 @@ type SelectMessagesOptions struct {
 	SearchText  *string
 	Limit       int
 	Offset      int
+
+	// Enrichment filters
+	IsQuestion *bool
+	HasCode    *bool
+	HasLinks   *bool
+	HasQuotes  *bool
 }
 
 // SelectMessages queries messages with filters
 func (db *DB) SelectMessages(opts SelectMessagesOptions) ([]*Message, error) {
 	query := `
-		SELECT id, source_type, source_id, timestamp, author_id, content, content_html,
-		       channel_id, thread_id, parent_id, is_thread_root,
-		       mentions, urls, code_blocks, attachments,
-		       normalized_at, schema_version
-		FROM messages
-		WHERE 1=1
+		SELECT m.id, m.source_type, m.source_id, m.timestamp, m.author_id, m.content, m.content_html,
+		       m.channel_id, m.thread_id, m.parent_id, m.is_thread_root,
+		       m.mentions, m.urls, m.code_blocks, m.attachments,
+		       m.normalized_at, m.schema_version
+		FROM messages m
 	`
+
+	// Add LEFT JOIN with enrichments if any enrichment filters are specified
+	needsEnrichmentJoin := opts.IsQuestion != nil || opts.HasCode != nil ||
+	                       opts.HasLinks != nil || opts.HasQuotes != nil
+	if needsEnrichmentJoin {
+		query += " LEFT JOIN enrichments e ON m.id = e.message_id"
+	}
+
+	query += " WHERE 1=1"
 	args := []interface{}{}
 
 	if opts.SourceType != nil {
-		query += " AND source_type = ?"
+		query += " AND m.source_type = ?"
 		args = append(args, *opts.SourceType)
 	}
 	if opts.AuthorID != nil {
-		query += " AND author_id = ?"
+		query += " AND m.author_id = ?"
 		args = append(args, *opts.AuthorID)
 	}
 	if opts.ChannelID != nil {
-		query += " AND channel_id = ?"
+		query += " AND m.channel_id = ?"
 		args = append(args, *opts.ChannelID)
 	}
 	if opts.ThreadID != nil {
-		query += " AND thread_id = ?"
+		query += " AND m.thread_id = ?"
 		args = append(args, *opts.ThreadID)
 	}
 	if opts.Since != nil {
-		query += " AND timestamp >= ?"
+		query += " AND m.timestamp >= ?"
 		args = append(args, *opts.Since)
 	}
 	if opts.Until != nil {
-		query += " AND timestamp <= ?"
+		query += " AND m.timestamp <= ?"
 		args = append(args, *opts.Until)
 	}
 	if opts.SearchText != nil {
 		// Use LIKE for text search (FTS5 disabled for now)
 		// TODO: Re-enable FTS5 when building with: go build -tags "fts5"
-		query += " AND content LIKE ?"
+		query += " AND m.content LIKE ?"
 		args = append(args, "%"+*opts.SearchText+"%")
 	}
 
-	query += " ORDER BY timestamp DESC"
+	// Enrichment filters
+	if opts.IsQuestion != nil {
+		query += " AND e.is_question = ?"
+		args = append(args, *opts.IsQuestion)
+	}
+	if opts.HasCode != nil {
+		query += " AND e.has_code = ?"
+		args = append(args, *opts.HasCode)
+	}
+	if opts.HasLinks != nil {
+		query += " AND e.has_links = ?"
+		args = append(args, *opts.HasLinks)
+	}
+	if opts.HasQuotes != nil {
+		query += " AND e.has_quotes = ?"
+		args = append(args, *opts.HasQuotes)
+	}
+
+	query += " ORDER BY m.timestamp DESC"
 
 	if opts.Limit > 0 {
 		query += " LIMIT ?"

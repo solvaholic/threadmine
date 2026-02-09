@@ -164,6 +164,12 @@ func (db *DB) SelectMessages(opts SelectMessagesOptions) ([]*Message, error) {
 		FROM messages m
 	`
 
+	// Add INNER JOIN with FTS5 if full-text search is specified
+	needsFTSJoin := opts.SearchText != nil
+	if needsFTSJoin {
+		query += " INNER JOIN messages_fts fts ON m.rowid = fts.rowid"
+	}
+
 	// Add LEFT JOIN with enrichments if any enrichment filters are specified
 	needsEnrichmentJoin := opts.IsQuestion != nil || opts.HasCode != nil ||
 	                       opts.HasLinks != nil || opts.HasQuotes != nil
@@ -199,10 +205,11 @@ func (db *DB) SelectMessages(opts SelectMessagesOptions) ([]*Message, error) {
 		args = append(args, *opts.Until)
 	}
 	if opts.SearchText != nil {
-		// Use LIKE for text search (FTS5 disabled for now)
-		// TODO: Re-enable FTS5 when building with: go build -tags "fts5"
-		query += " AND m.content LIKE ?"
-		args = append(args, "%"+*opts.SearchText+"%")
+		// Use FTS5 full-text search with MATCH operator
+		// Supports: boolean queries (AND, OR, NOT), phrase matching ("exact phrase"),
+		// prefix matching (word*), and relevance ranking
+		query += " AND fts.content MATCH ?"
+		args = append(args, *opts.SearchText)
 	}
 
 	// Enrichment filters

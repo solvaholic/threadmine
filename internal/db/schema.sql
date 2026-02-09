@@ -73,11 +73,9 @@ CREATE INDEX idx_messages_author ON messages(author_id);
 CREATE INDEX idx_messages_channel ON messages(channel_id);
 CREATE INDEX idx_messages_thread ON messages(thread_id);
 CREATE INDEX idx_messages_source ON messages(source_type);
--- CREATE INDEX idx_messages_content ON messages(content); -- For full-text search
 
--- Full-text search on message content (FTS5 - disabled until build is configured with FTS5 support)
--- Uncomment when building with: go build -tags "fts5"
-/*
+-- Full-text search on message content (FTS5)
+-- Build with: go build -tags "fts5"
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     id UNINDEXED,
     content,
@@ -86,19 +84,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 );
 
 -- Triggers to keep FTS index in sync
-CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
     INSERT INTO messages_fts(rowid, id, content) VALUES (new.rowid, new.id, new.content);
 END;
 
-CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
     INSERT INTO messages_fts(messages_fts, rowid, id, content) VALUES('delete', old.rowid, old.id, old.content);
 END;
 
-CREATE TRIGGER messages_fts_update AFTER UPDATE ON messages BEGIN
+CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
     INSERT INTO messages_fts(messages_fts, rowid, id, content) VALUES('delete', old.rowid, old.id, old.content);
     INSERT INTO messages_fts(rowid, id, content) VALUES (new.rowid, new.id, new.content);
 END;
-*/
 
 -- ============================================================================
 -- Users and Identity Resolution

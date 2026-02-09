@@ -15,8 +15,9 @@ ThreadMine focuses on data collection. Advanced analysis (NLP, graph analysis, g
 ## Quick Start
 
 ```bash
-# Build
-go build -o mine ./cmd/mine
+# Build with FTS5 full-text search support
+make build
+# Or manually: go build -tags "fts5" -o mine ./cmd/mine
 
 # Fetch from Slack (search-based)
 ./mine fetch slack --workspace myteam --user alice --since 7d
@@ -41,7 +42,7 @@ go build -o mine ./cmd/mine
 
 - **Search-first**: Uses source search APIs (Slack `search.messages`, GitHub `/search/issues`)
 - **Complete threads**: Optionally fetches entire conversation threads with `--threads` flag
-- **SQLite storage**: Fast queries with LIKE-based search (FTS5 planned)
+- **SQLite storage**: Fast queries with FTS5 full-text search (boolean queries, phrase matching, relevance ranking)
 - **Rate limiting**: Self-limits to 1/2 or 1/3 of API rate limits to avoid abuse
 - **Multiple formats**: JSON (default), JSONL (streaming), table (human-readable), graph (visualization)
 - **Cross-platform**: Unified schema across Slack, GitHub, and email (planned)
@@ -93,8 +94,12 @@ mine fetch github --repo org/repo --reviewer bob --type pr
 # Filter by author and time
 mine select --author alice --since 7d
 
-# Full-text search
+# Full-text search (FTS5 with advanced query syntax)
 mine select --search "kubernetes"
+mine select --search "kubernetes AND deployment"
+mine select --search "error OR failure"
+mine select --search '"exact phrase"'
+mine select --search "deploy*"  # Prefix matching
 
 # Multi-participant threads
 mine select --author alice --author bob --author charlie
@@ -154,6 +159,32 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 }
 ```
 
+## Building
+
+The project includes a Makefile that automatically includes the FTS5 build tag:
+
+```bash
+# Build the binary (default target)
+make build
+
+# Install to $GOPATH/bin
+make install
+
+# Run tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Clean build artifacts
+make clean
+
+# Show all available targets
+make help
+```
+
+All build commands automatically include `-tags "fts5"` for full-text search support.
+
 ## Examples
 
 ### Find your recent questions
@@ -189,7 +220,7 @@ mine select --author alice --author bob --format graph > conversation.json
 **Completed:**
 - ✅ SQLite schema and database layer
 - ✅ Command structure (fetch/select)
-- ✅ LIKE-based search (works across all SQLite builds)
+- ✅ FTS5 full-text search with boolean queries, phrase matching, and relevance ranking
 - ✅ Rate limiting framework
 - ✅ Slack search API integration with thread fetching
 - ✅ GitHub search API integration (issues, PRs, comments, reviews, timeline)
@@ -207,9 +238,9 @@ mine select --author alice --author bob --format graph > conversation.json
   - --has-quotes: Filter to messages containing quote blocks
 
 **In Progress:**
+- 🔨 (No active work items)
 
 **Planned:**
-- 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
 - 📋 Cross-platform identity resolution (email-based matching)
 - 📋 Email support (IMAP/mbox)
 
@@ -222,7 +253,9 @@ mine select --author alice --author bob --format graph > conversation.json
 ## Requirements
 
 - Go 1.25+
-- SQLite (via `github.com/mattn/go-sqlite3`)
+- Make (for automated building)
+- SQLite with FTS5 support (via `github.com/mattn/go-sqlite3`)
+  - Automatically enabled with `make build`
 - Slack desktop app (for cookie-based auth)
 - GitHub CLI (`gh`) for GitHub authentication
 

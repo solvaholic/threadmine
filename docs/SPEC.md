@@ -205,7 +205,7 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 - ✅ SQLite schema design
 - ✅ Database layer (internal/db)
 - ✅ Command structure (fetch/select)
-- ✅ Select query engine with LIKE-based search
+- ✅ Select query engine with FTS5 full-text search
 - ✅ Rate limiting tracking (per workspace, per endpoint)
 - ✅ Slack search API integration
 - ✅ Slack complete thread fetching with rate limiting
@@ -226,6 +226,12 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
   - --has-code: Filter to messages containing code blocks
   - --has-links: Filter to messages containing URLs
   - --has-quotes: Filter to messages containing quote blocks
+- ✅ FTS5 full-text search
+  - Boolean queries (AND, OR, NOT operators)
+  - Phrase matching ("exact phrase")
+  - Prefix matching (word*)
+  - Relevance ranking
+  - Automated build with: make build
 
 ### In Progress
 - 🔨 (No active work items)
@@ -233,7 +239,6 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 ### Planned
 - 📋 Cross-platform identity resolution (email-based matching)
 - 📋 Email support (IMAP/mbox)
-- 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
 
 ## Development Guidelines
 
@@ -250,6 +255,8 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 ~/.threadmine/
 ├── threadmine.db          # SQLite database (all data)
 └── logs/                  # Optional logging
+
+Makefile                   # Build automation with FTS5 support
 
 internal/
 ├── db/                    # Database layer
@@ -318,7 +325,7 @@ mine select --author alice --author bob --format graph > conversation.json
 
 ### Why SQLite?
 - Single-file database, easy backup
-- Fast full-text search (FTS5)
+- Fast full-text search with FTS5 (enabled)
 - Transaction support
 - No server required
 - Better performance than JSON files for queries

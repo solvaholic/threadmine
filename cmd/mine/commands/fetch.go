@@ -40,16 +40,17 @@ var fetchSlackCmd = &cobra.Command{
 	Short: "Fetch messages from Slack",
 	Long: `Fetch messages from Slack workspaces using search.
 
-This command uses Slack's search API to find messages matching criteria,
-then retrieves complete threads. Rate limiting is automatically applied
-to stay within Slack's API limits (self-limited to 1/2 of published rates).
+This command uses Slack's search API to find messages matching criteria.
+Use --threads to also fetch complete threads for messages that are part of threads.
+Rate limiting is automatically applied to stay within Slack's API limits
+(self-limited to 1/2 of published rates).
 
 Examples:
   # Fetch messages from a user in a channel
   mine fetch slack --workspace myteam --user alice --channel general --since 7d
 
-  # Fetch all messages mentioning a keyword
-  mine fetch slack --workspace myteam --search "kubernetes" --since 30d
+  # Fetch all messages mentioning a keyword with their threads
+  mine fetch slack --workspace myteam --search "kubernetes" --since 30d --threads
 
   # Fetch messages in a date range
   mine fetch slack --workspace myteam --channel engineering --since 2024-01-01 --until 2024-02-01`,
@@ -95,6 +96,7 @@ var (
 	slackUser      string
 	slackChannel   string
 	slackSearch    string
+	slackThreads   bool
 
 	// GitHub-specific flags
 	githubOrg       string
@@ -126,6 +128,7 @@ func init() {
 	fetchSlackCmd.Flags().StringVar(&slackUser, "user", "", "Filter by user (login name or 'me')")
 	fetchSlackCmd.Flags().StringVar(&slackChannel, "channel", "", "Filter by channel name")
 	fetchSlackCmd.Flags().StringVar(&slackSearch, "search", "", "Search query text")
+	fetchSlackCmd.Flags().BoolVar(&slackThreads, "threads", false, "Fetch complete threads for messages that are part of threads")
 	fetchSlackCmd.MarkFlagRequired("workspace")
 
 	// GitHub flags
@@ -192,14 +195,22 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 		queryParts = append(queryParts, slackSearch)
 	}
 	if fetchSince != "" {
-		queryParts = append(queryParts, fmt.Sprintf("after:%s", since.Format("2006-01-02")))
+		// For Slack's "after:" to be inclusive of the target date,
+		// we need to subtract one more day. E.g., if user wants "since 7d" (past 7 days),
+		// we compute 7 days ago, then use "after:" with 8 days ago.
+		sinceAdjusted := since.AddDate(0, 0, -1)
+		queryParts = append(queryParts, fmt.Sprintf("after:%s", sinceAdjusted.Format("2006-01-02")))
 	}
 	if fetchUntil != "" {
 		until, err := parseTimeSpec(fetchUntil)
 		if err != nil {
 			return fmt.Errorf("invalid --until value: %w", err)
 		}
-		queryParts = append(queryParts, fmt.Sprintf("before:%s", until.Format("2006-01-02")))
+		// For Slack's "before:" to be inclusive, we need to add one day.
+		// E.g., if user wants "until 7d" (up to 7 days ago),
+		// we compute 7 days ago, then use "before:" with 6 days ago.
+		untilAdjusted := until.AddDate(0, 0, 1)
+		queryParts = append(queryParts, fmt.Sprintf("before:%s", untilAdjusted.Format("2006-01-02")))
 	}
 
 	if len(queryParts) == 0 {
@@ -221,12 +232,18 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStderr(), "Authenticated as %s in %s (Team ID: %s)\n",
 		authResult.UserName, authResult.TeamName, authResult.TeamID)
 
-	// Initialize rate limiting
+	// Initialize rate limiting for search.messages
 	endpoint := "search.messages"
 	workspaceID := fmt.Sprintf("ws_slack_%s", authResult.TeamID)
 	err = database.InitRateLimit("slack", &workspaceID, endpoint, 60, 20, 10)
 	if err != nil {
 		return fmt.Errorf("failed to initialize rate limiting: %w", err)
+	}
+
+	// Initialize rate limiting for conversations.replies (50/min, self-limit to 25/min)
+	err = database.InitRateLimit("slack", &workspaceID, "conversations.replies", 60, 50, 25)
+	if err != nil {
+		return fmt.Errorf("failed to initialize conversations.replies rate limiting: %w", err)
 	}
 
 	// Check rate limit before proceeding
@@ -259,10 +276,22 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 	for i, result := range searchResult.Messages.Matches {
 		fmt.Fprintf(cmd.OutOrStderr(), "Processing message %d/%d...\n", i+1, len(searchResult.Messages.Matches))
 
-		// Check if this message is part of a thread
-		if result.ThreadTS != "" && !threadsProcessed[result.ThreadTS] {
+		// Extract thread_ts from permalink if not directly available
+		threadTS := result.ThreadTS
+		if threadTS == "" && result.Permalink != "" {
+			if idx := strings.Index(result.Permalink, "?thread_ts="); idx != -1 {
+				threadTS = result.Permalink[idx+len("?thread_ts="):]
+				// Remove any trailing query params
+				if ampIdx := strings.Index(threadTS, "&"); ampIdx != -1 {
+					threadTS = threadTS[:ampIdx]
+				}
+			}
+		}
+
+		// Check if this message is part of a thread and if we should fetch threads
+		if slackThreads && threadTS != "" && !threadsProcessed[threadTS] {
 			// Fetch complete thread
-			fmt.Fprintf(cmd.OutOrStderr(), "  Fetching thread %s...\n", result.ThreadTS)
+			fmt.Fprintf(cmd.OutOrStderr(), "  Fetching thread %s...\n", threadTS)
 
 			// Check rate limit for conversations.replies
 			canProceed, err := database.CheckRateLimit("slack", &workspaceID, "conversations.replies")
@@ -274,27 +303,36 @@ func runFetchSlack(cmd *cobra.Command, args []string) error {
 				break
 			}
 
-			threadMessages, err := authResult.Client.GetThreadReplies(ctx, result.Channel.ID, result.ThreadTS)
+			threadMessages, err := authResult.Client.GetThreadReplies(ctx, result.Channel.ID, threadTS)
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch thread: %v\n", err)
-				continue
-			}
-
-			database.RecordRequest("slack", &workspaceID, "conversations.replies")
-
-			// Store all messages in thread
-			for _, msg := range threadMessages {
-				if err := storeSlackMessage(database, msg, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
+				// Fall back to storing just this message
+				if err := storeSlackMessage(database, result, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
 					fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store message: %v\n", err)
 					continue
 				}
 				messageCount++
-			}
+			} else {
+				// Successfully fetched thread
+				database.RecordRequest("slack", &workspaceID, "conversations.replies")
 
-			threadsProcessed[result.ThreadTS] = true
-			threadCount++
-		} else if result.ThreadTS == "" {
-			// Single message, not part of a thread
+				fmt.Fprintf(cmd.OutOrStderr(), "  Found thread with %d messages\n", len(threadMessages))
+				threadCount++
+
+				// Store all messages in thread
+				for _, msg := range threadMessages {
+					if err := storeSlackMessage(database, msg, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
+						fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store message: %v\n", err)
+						continue
+					}
+					messageCount++
+				}
+
+				threadsProcessed[threadTS] = true
+			}
+		} else {
+			// Either --threads not set, or message not part of a thread, or thread already processed
+			// Just store this single message
 			if err := storeSlackMessage(database, result, authResult.TeamID, result.Channel.ID, &result.Channel); err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store message: %v\n", err)
 				continue
@@ -403,7 +441,7 @@ func storeSlackMessage(database *db.DB, msg interface{}, teamID, channelID strin
 
 // normalizeSlackMessage converts a Slack message to normalized format
 func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Message, error) {
-	var timestamp, user, text, threadTS string
+	var timestamp, user, text, threadTS, permalink string
 
 	switch m := msg.(type) {
 	case slack.SearchResult:
@@ -411,6 +449,7 @@ func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Messa
 		user = m.User
 		text = m.Text
 		threadTS = m.ThreadTS
+		permalink = m.Permalink
 	case slack.ThreadMessage:
 		timestamp = m.Timestamp
 		user = m.User
@@ -418,6 +457,19 @@ func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Messa
 		threadTS = m.ThreadTS
 	default:
 		return nil, fmt.Errorf("unsupported message type: %T", msg)
+	}
+
+	// If thread_ts is not set but we have a permalink, try to extract it from the permalink
+	// Slack search API sometimes omits thread_ts but includes it in the permalink
+	// Format: https://workspace.slack.com/archives/CHANNEL/pMSGTS?thread_ts=THREADTS
+	if threadTS == "" && permalink != "" {
+		if idx := strings.Index(permalink, "?thread_ts="); idx != -1 {
+			threadTS = permalink[idx+len("?thread_ts="):]
+			// Remove any trailing query params
+			if ampIdx := strings.Index(threadTS, "&"); ampIdx != -1 {
+				threadTS = threadTS[:ampIdx]
+			}
+		}
 	}
 
 	// Parse timestamp

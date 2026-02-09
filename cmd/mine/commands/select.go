@@ -106,14 +106,36 @@ func runSelect(cmd *cobra.Command, args []string) error {
 
 	// Handle author filter
 	if len(selectAuthors) > 0 {
+		// Look up author by name to get user ID
 		// For now, just use the first author
 		// TODO: Support multiple authors
-		opts.AuthorID = &selectAuthors[0]
+		authorName := selectAuthors[0]
+		users, err := database.FindUsersByName(authorName)
+		if err != nil {
+			return fmt.Errorf("failed to find user '%s': %w", authorName, err)
+		}
+		if len(users) == 0 {
+			return fmt.Errorf("no user found with name '%s'", authorName)
+		}
+		// If multiple users found, use the first one
+		// TODO: Let user disambiguate if multiple matches
+		opts.AuthorID = &users[0].ID
 	}
 
 	// Handle channel filter
 	if len(selectChannels) > 0 {
-		opts.ChannelID = &selectChannels[0]
+		// Look up channel by name to get channel ID
+		channelName := selectChannels[0]
+		channels, err := database.FindChannelsByName(channelName)
+		if err != nil {
+			return fmt.Errorf("failed to find channel '%s': %w", channelName, err)
+		}
+		if len(channels) == 0 {
+			return fmt.Errorf("no channel found with name '%s'", channelName)
+		}
+		// If multiple channels found, use the first one
+		// TODO: Let user disambiguate if multiple matches
+		opts.ChannelID = &channels[0].ID
 	}
 
 	// Handle thread filter

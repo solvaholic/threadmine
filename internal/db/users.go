@@ -168,3 +168,36 @@ func (db *DB) GetUsersByIdentity(canonicalID string) ([]*User, error) {
 
 	return users, nil
 }
+
+// FindUsersByName finds users by display name, real name, or source ID
+func (db *DB) FindUsersByName(name string) ([]*User, error) {
+	rows, err := db.Query(`
+		SELECT id, source_type, source_id, display_name, real_name, email, avatar_url,
+		       canonical_id, fetched_at, updated_at
+		FROM users
+		WHERE display_name = ? OR real_name = ? OR source_id = ?
+	`, name, name, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users by name: %w", err)
+	}
+	defer rows.Close()
+
+	users := []*User{}
+	for rows.Next() {
+		user := &User{}
+		err := rows.Scan(
+			&user.ID, &user.SourceType, &user.SourceID, &user.DisplayName, &user.RealName,
+			&user.Email, &user.AvatarURL, &user.CanonicalID, &user.FetchedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}

@@ -167,3 +167,37 @@ func (db *DB) GetWorkspacesBySource(sourceType string) ([]*Workspace, error) {
 
 	return workspaces, nil
 }
+
+// FindChannelsByName finds channels by name, display name, or source ID
+func (db *DB) FindChannelsByName(name string) ([]*Channel, error) {
+	rows, err := db.Query(`
+		SELECT id, source_type, source_id, workspace_id, name, display_name, type,
+		       is_private, parent_space, metadata, fetched_at, updated_at
+		FROM channels
+		WHERE name = ? OR display_name = ? OR source_id = ?
+	`, name, name, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query channels by name: %w", err)
+	}
+	defer rows.Close()
+
+	channels := []*Channel{}
+	for rows.Next() {
+		channel := &Channel{}
+		err := rows.Scan(
+			&channel.ID, &channel.SourceType, &channel.SourceID, &channel.WorkspaceID,
+			&channel.Name, &channel.DisplayName, &channel.Type, &channel.IsPrivate,
+			&channel.ParentSpace, &channel.Metadata, &channel.FetchedAt, &channel.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan channel: %w", err)
+		}
+		channels = append(channels, channel)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating channels: %w", err)
+	}
+
+	return channels, nil
+}

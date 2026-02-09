@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +62,148 @@ func NewClient(owner, repo string) *Client {
 		owner: owner,
 		repo:  repo,
 	}
+}
+
+// SearchIssues searches for issues and PRs using GitHub search API
+func (c *Client) SearchIssues(ctx context.Context, query string, limit int) ([]Issue, error) {
+	// Use GitHub search API directly via gh api
+	// URL encode the query and add per_page parameter to limit results
+	encodedQuery := url.QueryEscape(query)
+	apiURL := fmt.Sprintf("/search/issues?q=%s&per_page=%d", encodedQuery, limit)
+
+	cmd := exec.CommandContext(ctx, "gh", "api", apiURL, "-H", "Accept: application/vnd.github+json")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("gh api failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to search issues: %w", err)
+	}
+
+	// GitHub search API returns results wrapped in an object with "items" array
+	var response struct {
+		TotalCount        int  `json:"total_count"`
+		IncompleteResults bool `json:"incomplete_results"`
+		Items             []struct {
+			Number    int    `json:"number"`
+			Title     string `json:"title"`
+			Body      string `json:"body"`
+			State     string `json:"state"`
+			User      struct {
+				Login string `json:"login"`
+			} `json:"user"`
+			CreatedAt  time.Time  `json:"created_at"`
+			UpdatedAt  time.Time  `json:"updated_at"`
+			ClosedAt   *time.Time `json:"closed_at"`
+			Labels     []struct {
+				Name string `json:"name"`
+			} `json:"labels"`
+			RepositoryURL string `json:"repository_url"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse search results: %w", err)
+	}
+
+	// Convert to Issue structs
+	issues := make([]Issue, 0, len(response.Items))
+	for _, r := range response.Items {
+		issue := Issue{
+			Number:    r.Number,
+			Title:     r.Title,
+			Body:      r.Body,
+			State:     r.State,
+			User:      User{Login: r.User.Login},
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+			ClosedAt:  r.ClosedAt,
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, nil
+}
+
+// GetIssueTimeline fetches timeline events for an issue
+func (c *Client) GetIssueTimeline(ctx context.Context, issueNumber int) ([]TimelineEvent, error) {
+	cmd := exec.CommandContext(ctx, "gh", "api", "--paginate",
+		fmt.Sprintf("repos/%s/%s/issues/%d/timeline", c.owner, c.repo, issueNumber),
+		"-H", "Accept: application/vnd.github.mockingbird-preview+json")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch timeline: %w", err)
+	}
+
+	var events []TimelineEvent
+	if err := json.Unmarshal(output, &events); err != nil {
+		return nil, fmt.Errorf("failed to parse timeline: %w", err)
+	}
+
+	return events, nil
+}
+
+// GetPullRequestReviewComments fetches review comments (line-by-line comments) for a PR
+func (c *Client) GetPullRequestReviewComments(ctx context.Context, prNumber int) ([]ReviewComment, error) {
+	cmd := exec.CommandContext(ctx, "gh", "api", "--paginate",
+		fmt.Sprintf("repos/%s/%s/pulls/%d/comments", c.owner, c.repo, prNumber))
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch review comments: %w", err)
+	}
+
+	var comments []ReviewComment
+	if err := json.Unmarshal(output, &comments); err != nil {
+		return nil, fmt.Errorf("failed to parse review comments: %w", err)
+	}
+
+	return comments, nil
+}
+
+// TimelineEvent represents a GitHub issue timeline event
+type TimelineEvent struct {
+	ID        int64     `json:"id"`
+	Event     string    `json:"event"`
+	CreatedAt time.Time `json:"created_at"`
+	Actor     User      `json:"actor"`
+	Body      string    `json:"body,omitempty"`       // For cross-references
+	Label     *struct {
+		Name string `json:"name"`
+	} `json:"label,omitempty"` // For labeled/unlabeled events
+	Assignee  *User  `json:"assignee,omitempty"`   // For assigned/unassigned
+	Assigner  *User  `json:"assigner,omitempty"`
+	CommitID  string `json:"commit_id,omitempty"`   // For referenced events
+	CommitURL string `json:"commit_url,omitempty"`
+}
+
+// IsSignificant returns true if the timeline event should be stored as a message
+func (e *TimelineEvent) IsSignificant() bool {
+	// Store events with bodies (cross-references)
+	if e.Body != "" {
+		return true
+	}
+
+	// Store significant state-change events
+	significantEvents := map[string]bool{
+		"closed":   true,
+		"reopened": true,
+		"merged":   true,
+		"locked":   true,
+		"unlocked": true,
+	}
+
+	return significantEvents[e.Event]
+}
+
+// ReviewComment represents a GitHub PR review comment
+type ReviewComment struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	User      User      `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Path      string    `json:"path"`
+	Line      int       `json:"line"`
 }
 
 // Repository represents a GitHub repository
@@ -764,4 +907,169 @@ func (c *Client) savePRReviewsToCache(prNumber int, reviews []Review) error {
 	}
 
 	return nil
+}
+
+// Discussion represents a GitHub discussion
+type Discussion struct {
+	Number    int        `json:"number"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	ClosedAt  *time.Time `json:"closedAt"`
+	Author    struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	Category struct {
+		Name string `json:"name"`
+	} `json:"category"`
+}
+
+// DiscussionComment represents a comment on a discussion
+type DiscussionComment struct {
+	ID        string    `json:"id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Author    struct {
+		Login string `json:"login"`
+	} `json:"author"`
+}
+
+// SearchDiscussions searches for discussions using GraphQL
+func (c *Client) SearchDiscussions(ctx context.Context, query string, limit int) ([]Discussion, error) {
+	// Build GraphQL query for discussions
+	// The search query should be in GitHub search syntax (e.g., "repo:owner/repo updated:>=2026-01-01")
+	graphqlQuery := fmt.Sprintf(`
+query {
+  search(query: "%s", type: DISCUSSION, first: %d) {
+    nodes {
+      ... on Discussion {
+        number
+        title
+        body
+        createdAt
+        updatedAt
+        closedAt
+        author {
+          login
+        }
+        category {
+          name
+        }
+      }
+    }
+  }
+}`, query, limit)
+
+	cmd := exec.CommandContext(ctx, "gh", "api", "graphql", "-f", fmt.Sprintf("query=%s", graphqlQuery))
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("gh api graphql failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to search discussions: %w", err)
+	}
+
+	var response struct {
+		Data struct {
+			Search struct {
+				Nodes []Discussion `json:"nodes"`
+			} `json:"search"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse discussion search results: %w", err)
+	}
+
+	return response.Data.Search.Nodes, nil
+}
+
+// GetDiscussionComments fetches comments for a discussion using GraphQL
+func (c *Client) GetDiscussionComments(ctx context.Context, discussionNumber int) ([]DiscussionComment, error) {
+	graphqlQuery := fmt.Sprintf(`
+query {
+  repository(owner: "%s", name: "%s") {
+    discussion(number: %d) {
+      id
+      comments(first: 100) {
+        nodes {
+          id
+          body
+          createdAt
+          updatedAt
+          author {
+            login
+          }
+          replies(first: 100) {
+            nodes {
+              id
+              body
+              createdAt
+              updatedAt
+              author {
+                login
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`, c.owner, c.repo, discussionNumber)
+
+	cmd := exec.CommandContext(ctx, "gh", "api", "graphql", "-f", fmt.Sprintf("query=%s", graphqlQuery))
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("gh api graphql failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to fetch discussion comments: %w", err)
+	}
+
+	var response struct {
+		Data struct {
+			Repository struct {
+				Discussion struct {
+					ID       string `json:"id"`
+					Comments struct {
+						Nodes []struct {
+							ID        string    `json:"id"`
+							Body      string    `json:"body"`
+							CreatedAt time.Time `json:"createdAt"`
+							UpdatedAt time.Time `json:"updatedAt"`
+							Author    struct {
+								Login string `json:"login"`
+							} `json:"author"`
+							Replies struct {
+								Nodes []DiscussionComment `json:"nodes"`
+							} `json:"replies"`
+						} `json:"nodes"`
+					} `json:"comments"`
+				} `json:"discussion"`
+			} `json:"repository"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse discussion comments: %w", err)
+	}
+
+	// Flatten comments and replies into a single list
+	var allComments []DiscussionComment
+	for _, comment := range response.Data.Repository.Discussion.Comments.Nodes {
+		// Add the top-level comment
+		allComments = append(allComments, DiscussionComment{
+			ID:        comment.ID,
+			Body:      comment.Body,
+			CreatedAt: comment.CreatedAt,
+			UpdatedAt: comment.UpdatedAt,
+			Author:    comment.Author,
+		})
+		// Add all replies
+		allComments = append(allComments, comment.Replies.Nodes...)
+	}
+
+	return allComments, nil
 }

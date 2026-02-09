@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/solvaholic/threadmine/internal/db"
+	"github.com/solvaholic/threadmine/internal/github"
 	"github.com/solvaholic/threadmine/internal/slack"
 	"github.com/spf13/cobra"
 )
@@ -63,15 +64,23 @@ var fetchGitHubCmd = &cobra.Command{
 This command uses GitHub's search API to find issues/PRs matching criteria,
 then retrieves all comments, review comments (for PRs), and timeline events.
 
+Note: 'author' searches for issue/PR authors, 'commenter' searches for comment authors.
+
 Examples:
-  # Fetch issues with a label
+  # Fetch issues with a label from a specific repo
   mine fetch github --repo org/repo --label bug --since 30d
 
-  # Fetch pull requests by author
+  # Fetch pull requests by issue author
   mine fetch github --repo org/repo --author alice --type pr --since 7d
 
-  # Fetch issues mentioning a keyword
-  mine fetch github --repo org/repo --search "authentication" --since 90d`,
+  # Fetch issues with comments from a specific user
+  mine fetch github --repo org/repo --commenter bob --since 14d
+
+  # Fetch from a repo using separate org and repo flags
+  mine fetch github --org myorg --repo myrepo --since 7d
+
+  # Org-wide search (not fully implemented yet)
+  mine fetch github --org myorg --search "bug" --since 7d`,
 	RunE: runFetchGitHub,
 }
 
@@ -88,12 +97,14 @@ var (
 	slackSearch    string
 
 	// GitHub-specific flags
-	githubRepo     string
-	githubAuthor   string
-	githubReviewer string
-	githubLabel    string
-	githubSearch   string
-	githubType     string // issue, pr, or all
+	githubOrg       string
+	githubRepo      string
+	githubAuthor    string
+	githubCommenter string
+	githubReviewer  string
+	githubLabel     string
+	githubSearch    string
+	githubType      string // issue, pr, or all
 )
 
 func init() {
@@ -118,13 +129,16 @@ func init() {
 	fetchSlackCmd.MarkFlagRequired("workspace")
 
 	// GitHub flags
-	fetchGitHubCmd.Flags().StringVar(&githubRepo, "repo", "", "Repository (org/repo format, required)")
-	fetchGitHubCmd.Flags().StringVar(&githubAuthor, "author", "", "Filter by author username")
+	fetchGitHubCmd.Flags().StringVar(&githubOrg, "org", "", "Organization name (use with --repo for single repo, or alone for org-wide search)")
+	fetchGitHubCmd.Flags().StringVar(&githubOrg, "owner", "", "Alias for --org")
+	fetchGitHubCmd.Flags().StringVar(&githubRepo, "repo", "", "Repository name (use with --org, or use org/repo format)")
+	fetchGitHubCmd.Flags().StringVar(&githubAuthor, "author", "", "Filter by issue/PR author username")
+	fetchGitHubCmd.Flags().StringVar(&githubCommenter, "commenter", "", "Filter by comment author username")
 	fetchGitHubCmd.Flags().StringVar(&githubReviewer, "reviewer", "", "Filter by PR reviewer (PRs only)")
 	fetchGitHubCmd.Flags().StringVar(&githubLabel, "label", "", "Filter by label")
 	fetchGitHubCmd.Flags().StringVar(&githubSearch, "search", "", "Search query text")
 	fetchGitHubCmd.Flags().StringVar(&githubType, "type", "all", "Type: issue, pr, or all")
-	fetchGitHubCmd.MarkFlagRequired("repo")
+	// Note: Either --org or --repo (with org/repo format) is required, validated at runtime
 }
 
 func runFetchSlack(cmd *cobra.Command, args []string) error {
@@ -485,20 +499,47 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid --since value: %w", err)
 	}
 
-	// Parse repo (org/repo format)
-	parts := strings.Split(githubRepo, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo format: %s (expected org/repo)", githubRepo)
+	// Parse org and repo
+	var owner, repo string
+	var searchScope string // "repo:owner/repo" or "org:owner"
+
+	if githubRepo != "" {
+		// Check if repo contains /
+		if strings.Contains(githubRepo, "/") {
+			// Format: org/repo
+			parts := strings.Split(githubRepo, "/")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid --repo format: %s (expected org/repo or just repo with --org)", githubRepo)
+			}
+			owner = parts[0]
+			repo = parts[1]
+			searchScope = fmt.Sprintf("repo:%s/%s", owner, repo)
+		} else {
+			// Just repo name, need --org
+			if githubOrg == "" {
+				return fmt.Errorf("when using --repo with just a repo name, --org is required")
+			}
+			owner = githubOrg
+			repo = githubRepo
+			searchScope = fmt.Sprintf("repo:%s/%s", owner, repo)
+		}
+	} else if githubOrg != "" {
+		// Org-wide search
+		owner = githubOrg
+		repo = "" // No specific repo
+		searchScope = fmt.Sprintf("org:%s", owner)
+	} else {
+		return fmt.Errorf("either --org or --repo is required")
 	}
 
 	// Build search query for GitHub
-	queryParts := []string{fmt.Sprintf("repo:%s", githubRepo)}
+	queryParts := []string{searchScope}
 
 	if githubAuthor != "" {
 		queryParts = append(queryParts, fmt.Sprintf("author:%s", githubAuthor))
 	}
-	if githubReviewer != "" && (githubType == "pr" || githubType == "all") {
-		queryParts = append(queryParts, fmt.Sprintf("reviewed-by:%s", githubReviewer))
+	if githubCommenter != "" {
+		queryParts = append(queryParts, fmt.Sprintf("commenter:%s", githubCommenter))
 	}
 	if githubLabel != "" {
 		queryParts = append(queryParts, fmt.Sprintf("label:%s", githubLabel))
@@ -507,34 +548,624 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		queryParts = append(queryParts, githubSearch)
 	}
 
+	// Add updated date filter
+	queryParts = append(queryParts, fmt.Sprintf("updated:>=%s", since.Format("2006-01-02")))
+
 	// Add type filter
 	if githubType == "issue" {
 		queryParts = append(queryParts, "is:issue")
 	} else if githubType == "pr" {
 		queryParts = append(queryParts, "is:pr")
 	}
+	// For githubType == "all", don't add a type filter
 
 	searchQuery := strings.Join(queryParts, " ")
 
 	fmt.Fprintf(cmd.OutOrStderr(), "Fetching GitHub items with query: %s\n", searchQuery)
-	fmt.Fprintf(cmd.OutOrStderr(), "Since: %s\n", since.Format("2006-01-02"))
-	fmt.Fprintf(cmd.OutOrStderr(), "Note: GitHub search integration not yet fully implemented\n")
-	fmt.Fprintf(cmd.OutOrStderr(), "TODO: Implement GitHub search with complete data fetching\n")
+	if repo != "" {
+		fmt.Fprintf(cmd.OutOrStderr(), "Repository: %s/%s\n", owner, repo)
+	} else {
+		fmt.Fprintf(cmd.OutOrStderr(), "Organization: %s\n", owner)
+	}
 
-	// TODO: Implement GitHub search API integration
-	// 1. Authenticate with GitHub (via gh CLI)
-	// 2. Execute search query
-	// 3. For each issue/PR:
-	//    - Fetch all comments
-	//    - Fetch all review comments (PRs only)
-	//    - Fetch timeline events
-	// 4. For discussions (if requested):
-	//    - Fetch all comments and replies
-	// 5. Store raw data in database
-	// 6. Normalize and store in messages table
-
+	// Authenticate with GitHub (via gh CLI)
+	fmt.Fprintf(cmd.OutOrStderr(), "Checking GitHub authentication...\n")
 	ctx := context.Background()
-	_ = ctx // Will be used for API calls
+	authResult, err := github.Authenticate()
+	if err != nil {
+		return fmt.Errorf("GitHub authentication failed: %w", err)
+	}
 
-	return fmt.Errorf("GitHub fetching not yet fully implemented - coming soon")
+	fmt.Fprintf(cmd.OutOrStderr(), "Authenticated as %s\n", authResult.User)
+
+	// Create client for this repo (if specific repo was specified)
+	// For org-wide searches, we'll create clients per-issue
+	var client *github.Client
+	if repo != "" {
+		client = github.NewClient(owner, repo)
+	}
+
+	// Search for issues/PRs
+	fmt.Fprintf(cmd.OutOrStderr(), "Searching GitHub...\n")
+
+	// For org-wide search, we need to search without a specific repo client
+	// Use a temporary client just for search
+	searchClient := github.NewClient(owner, "")
+	results, err := searchClient.SearchIssues(ctx, searchQuery, fetchLimit)
+	if err != nil {
+		return fmt.Errorf("failed to search GitHub: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStderr(), "Found %d items\n", len(results))
+
+	// Process each result
+	messageCount := 0
+	orgID := fmt.Sprintf("org_github_%s", owner)
+
+	for i, item := range results {
+		// For org-wide search, extract repo info from the issue
+		var itemOwner, itemRepo string
+		if repo == "" {
+			// Org-wide search: extract from Repository field in result
+			// The gh search adds repository info to each result
+			// For now, we'll need to parse it from the issue data
+			// This is a limitation - we'll skip items without repo info
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: org-wide search not fully implemented yet, skipping item #%d\n", item.Number)
+			continue
+		} else {
+			itemOwner = owner
+			itemRepo = repo
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "Processing item %d/%d: #%d %s\n", i+1, len(results), item.Number, item.Title)
+
+		// Create client for this specific item's repo
+		if client == nil {
+			client = github.NewClient(itemOwner, itemRepo)
+		}
+
+		// Determine if this is an issue or PR
+		isPR := githubType == "pr" || (githubType == "all" && strings.Contains(searchQuery, "is:pr"))
+
+		// Store the issue/PR body as a message
+		if err := storeGitHubIssue(database, &item, itemOwner, itemRepo, orgID); err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store issue: %v\n", err)
+			continue
+		}
+		messageCount++
+
+		// Fetch and store comments
+		fmt.Fprintf(cmd.OutOrStderr(), "  Fetching comments...\n")
+		comments, err := client.GetIssueComments(ctx, item.Number)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch comments: %v\n", err)
+		} else {
+			for _, comment := range comments {
+				if err := storeGitHubComment(database, &comment, &item, itemOwner, itemRepo, orgID); err != nil {
+					fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store comment: %v\n", err)
+					continue
+				}
+				messageCount++
+			}
+		}
+
+		// For PRs, fetch review comments and reviews
+		if isPR {
+			fmt.Fprintf(cmd.OutOrStderr(), "  Fetching PR review comments...\n")
+			reviewComments, err := client.GetPullRequestReviewComments(ctx, item.Number)
+			if err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch review comments: %v\n", err)
+			} else {
+				for _, rc := range reviewComments {
+					if err := storeGitHubReviewComment(database, &rc, &item, itemOwner, itemRepo, orgID); err != nil {
+						fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store review comment: %v\n", err)
+						continue
+					}
+					messageCount++
+				}
+			}
+
+			fmt.Fprintf(cmd.OutOrStderr(), "  Fetching PR reviews...\n")
+			reviews, err := client.GetPullRequestReviews(ctx, item.Number)
+			if err != nil {
+				fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch reviews: %v\n", err)
+			} else {
+				for _, review := range reviews {
+					if err := storeGitHubReview(database, &review, &item, itemOwner, itemRepo, orgID); err != nil {
+						fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store review: %v\n", err)
+						continue
+					}
+					messageCount++
+				}
+			}
+		}
+
+		// Fetch timeline
+		fmt.Fprintf(cmd.OutOrStderr(), "  Fetching timeline...\n")
+		timeline, err := client.GetIssueTimeline(ctx, item.Number)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch timeline: %v\n", err)
+		} else {
+			// Store significant timeline events
+			significantCount := 0
+			for _, event := range timeline {
+				if event.IsSignificant() {
+					if err := storeGitHubTimelineEvent(database, &event, &item, itemOwner, itemRepo, orgID); err != nil {
+						fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store timeline event: %v\n", err)
+						continue
+					}
+					significantCount++
+					messageCount++
+				}
+			}
+			fmt.Fprintf(cmd.OutOrStderr(), "  Found %d timeline events (%d significant stored)\n", len(timeline), significantCount)
+		}
+	}
+
+	// Search for discussions (only for specific repos, not org-wide)
+	if repo != "" {
+		fmt.Fprintf(cmd.OutOrStderr(), "\nSearching for discussions...\n")
+		discussions, err := client.SearchDiscussions(ctx, searchQuery, fetchLimit)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), "Warning: failed to search discussions: %v\n", err)
+		} else {
+			fmt.Fprintf(cmd.OutOrStderr(), "Found %d discussions\n", len(discussions))
+
+			for i, discussion := range discussions {
+				fmt.Fprintf(cmd.OutOrStderr(), "Processing discussion %d/%d: #%d %s\n", i+1, len(discussions), discussion.Number, discussion.Title)
+
+				// Store the discussion as a message
+				if err := storeGitHubDiscussion(database, &discussion, owner, repo, orgID); err != nil {
+					fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store discussion: %v\n", err)
+					continue
+				}
+				messageCount++
+
+				// Fetch and store discussion comments and replies
+				fmt.Fprintf(cmd.OutOrStderr(), "  Fetching discussion comments...\n")
+				comments, err := client.GetDiscussionComments(ctx, discussion.Number)
+				if err != nil {
+					fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to fetch discussion comments: %v\n", err)
+				} else {
+					for _, comment := range comments {
+						if err := storeGitHubDiscussionComment(database, &comment, &discussion, owner, repo, orgID); err != nil {
+							fmt.Fprintf(cmd.OutOrStderr(), "  Warning: failed to store discussion comment: %v\n", err)
+							continue
+						}
+						messageCount++
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStderr(), "\nCompleted!\n")
+	fmt.Fprintf(cmd.OutOrStderr(), "Messages stored: %d\n", messageCount)
+
+	return nil
+}
+
+// storeGitHubIssue stores a GitHub issue/PR as a message
+func storeGitHubIssue(database *db.DB, issue *github.Issue, owner, repo, orgID string) error {
+	// Store user info
+	username := issue.User.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	// Store repo/channel info
+	repoName := fmt.Sprintf("%s/%s", owner, repo)
+	displayName := repoName
+	chanType := "repository"
+	dbChannel := &db.Channel{
+		ID:          fmt.Sprintf("chan_github_%s_%s", owner, repo),
+		SourceType:  "github",
+		SourceID:    repoName,
+		WorkspaceID: &orgID,
+		Name:        repoName,
+		DisplayName: &displayName,
+		Type:        &chanType,
+		IsPrivate:   false,
+		ParentSpace: &orgID,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveChannel(dbChannel)
+
+	// Store raw issue
+	rawData, err := json.Marshal(issue)
+	if err != nil {
+		return fmt.Errorf("failed to marshal issue: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_%d", owner, repo, issue.Number)
+	sourceID := fmt.Sprintf("%s/%s#%d", owner, repo, issue.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, dbChannel.ID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw issue: %w", err)
+	}
+
+	// Normalize and store
+	normalized := &db.Message{
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     sourceID,
+		Timestamp:    issue.CreatedAt,
+		AuthorID:     user.ID,
+		Content:      fmt.Sprintf("%s\n\n%s", issue.Title, issue.Body),
+		ChannelID:    dbChannel.ID,
+		ThreadID:     &msgID, // Issue is the thread root
+		IsThreadRoot: true,
+		Mentions:     []string{},
+		URLs:         []string{},
+		CodeBlocks:   []db.CodeBlock{},
+		Attachments:  []db.Attachment{},
+		NormalizedAt: time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubComment stores a GitHub issue comment
+func storeGitHubComment(database *db.DB, comment *github.Comment, issue *github.Issue, owner, repo, orgID string) error {
+	// Store user info
+	username := comment.User.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	// Store raw comment
+	rawData, err := json.Marshal(comment)
+	if err != nil {
+		return fmt.Errorf("failed to marshal comment: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_%d_comment_%d", owner, repo, issue.Number, comment.ID)
+	sourceID := fmt.Sprintf("%s/%s#%d-comment-%d", owner, repo, issue.Number, comment.ID)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := fmt.Sprintf("msg_github_%s_%s_%d", owner, repo, issue.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw comment: %w", err)
+	}
+
+	// Normalize and store
+	normalized := &db.Message{
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     sourceID,
+		Timestamp:    comment.CreatedAt,
+		AuthorID:     user.ID,
+		Content:      comment.Body,
+		ChannelID:    channelID,
+		ThreadID:     &threadID,
+		ParentID:     &threadID, // Reply to the issue
+		IsThreadRoot: false,
+		Mentions:     []string{},
+		URLs:         []string{},
+		CodeBlocks:   []db.CodeBlock{},
+		Attachments:  []db.Attachment{},
+		NormalizedAt: time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubReviewComment stores a GitHub PR review comment
+func storeGitHubReviewComment(database *db.DB, comment *github.ReviewComment, pr *github.Issue, owner, repo, orgID string) error {
+	username := comment.User.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	rawData, err := json.Marshal(comment)
+	if err != nil {
+		return fmt.Errorf("failed to marshal review comment: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_%d_review_comment_%d", owner, repo, pr.Number, comment.ID)
+	sourceID := fmt.Sprintf("%s/%s#%d-review-comment-%d", owner, repo, pr.Number, comment.ID)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := fmt.Sprintf("msg_github_%s_%s_%d", owner, repo, pr.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw review comment: %w", err)
+	}
+
+	// Include file path context in content
+	content := fmt.Sprintf("[%s:%d] %s", comment.Path, comment.Line, comment.Body)
+
+	normalized := &db.Message{
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     sourceID,
+		Timestamp:    comment.CreatedAt,
+		AuthorID:     user.ID,
+		Content:      content,
+		ChannelID:    channelID,
+		ThreadID:     &threadID,
+		ParentID:     &threadID,
+		IsThreadRoot: false,
+		Mentions:     []string{},
+		URLs:         []string{},
+		CodeBlocks:   []db.CodeBlock{},
+		Attachments:  []db.Attachment{},
+		NormalizedAt: time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubReview stores a GitHub PR review
+func storeGitHubReview(database *db.DB, review *github.Review, pr *github.Issue, owner, repo, orgID string) error {
+	// Skip reviews with no body
+	if review.Body == "" {
+		return nil
+	}
+
+	username := review.User.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	rawData, err := json.Marshal(review)
+	if err != nil {
+		return fmt.Errorf("failed to marshal review: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_%d_review_%d", owner, repo, pr.Number, review.ID)
+	sourceID := fmt.Sprintf("%s/%s#%d-review-%d", owner, repo, pr.Number, review.ID)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := fmt.Sprintf("msg_github_%s_%s_%d", owner, repo, pr.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw review: %w", err)
+	}
+
+	// Include review state in content
+	content := fmt.Sprintf("[%s] %s", review.State, review.Body)
+
+	normalized := &db.Message{
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     sourceID,
+		Timestamp:    review.SubmittedAt,
+		AuthorID:     user.ID,
+		Content:      content,
+		ChannelID:    channelID,
+		ThreadID:     &threadID,
+		ParentID:     &threadID,
+		IsThreadRoot: false,
+		Mentions:     []string{},
+		URLs:         []string{},
+		CodeBlocks:   []db.CodeBlock{},
+		Attachments:  []db.Attachment{},
+		NormalizedAt: time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubDiscussion stores a GitHub discussion as a message
+func storeGitHubDiscussion(database *db.DB, discussion *github.Discussion, owner, repo, orgID string) error {
+	username := discussion.Author.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	// Store repo/channel info
+	repoName := fmt.Sprintf("%s/%s", owner, repo)
+	displayName := repoName
+	chanType := "repository"
+	dbChannel := &db.Channel{
+		ID:          fmt.Sprintf("chan_github_%s_%s", owner, repo),
+		SourceType:  "github",
+		SourceID:    repoName,
+		WorkspaceID: &orgID,
+		Name:        repoName,
+		DisplayName: &displayName,
+		Type:        &chanType,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveChannel(dbChannel)
+
+	rawData, err := json.Marshal(discussion)
+	if err != nil {
+		return fmt.Errorf("failed to marshal discussion: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_discussion_%d", owner, repo, discussion.Number)
+	sourceID := fmt.Sprintf("%s/%s/discussions/%d", owner, repo, discussion.Number)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := msgID // Discussion is its own thread root
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw discussion: %w", err)
+	}
+
+	// Include category in content
+	content := discussion.Body
+	if discussion.Category.Name != "" {
+		content = fmt.Sprintf("[%s] %s", discussion.Category.Name, content)
+	}
+
+	normalized := &db.Message{
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     discussion.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       content,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      nil, // No parent, this is the root
+		IsThreadRoot:  true,
+		Mentions:      []string{},
+		URLs:          []string{},
+		CodeBlocks:    []db.CodeBlock{},
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubDiscussionComment stores a discussion comment or reply as a message
+func storeGitHubDiscussionComment(database *db.DB, comment *github.DiscussionComment, discussion *github.Discussion, owner, repo, orgID string) error {
+	username := comment.Author.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	rawData, err := json.Marshal(comment)
+	if err != nil {
+		return fmt.Errorf("failed to marshal discussion comment: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_discussion_%d_comment_%s", owner, repo, discussion.Number, comment.ID)
+	sourceID := fmt.Sprintf("%s/%s/discussions/%d#%s", owner, repo, discussion.Number, comment.ID)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := fmt.Sprintf("msg_github_%s_%s_discussion_%d", owner, repo, discussion.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw discussion comment: %w", err)
+	}
+
+	normalized := &db.Message{
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     comment.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       comment.Body,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      &threadID, // All comments point to discussion as parent
+		IsThreadRoot:  false,
+		Mentions:      []string{},
+		URLs:          []string{},
+		CodeBlocks:    []db.CodeBlock{},
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
+}
+
+// storeGitHubTimelineEvent stores a significant timeline event as a message
+func storeGitHubTimelineEvent(database *db.DB, event *github.TimelineEvent, issue *github.Issue, owner, repo, orgID string) error {
+	username := event.Actor.Login
+	user := &db.User{
+		ID:          fmt.Sprintf("user_github_%s", username),
+		SourceType:  "github",
+		SourceID:    username,
+		DisplayName: &username,
+		FetchedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	database.SaveUser(user)
+
+	rawData, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal timeline event: %w", err)
+	}
+
+	msgID := fmt.Sprintf("msg_github_%s_%s_%d_timeline_%d", owner, repo, issue.Number, event.ID)
+	sourceID := fmt.Sprintf("%s/%s#%d-event-%d", owner, repo, issue.Number, event.ID)
+	channelID := fmt.Sprintf("chan_github_%s_%s", owner, repo)
+	threadID := fmt.Sprintf("msg_github_%s_%s_%d", owner, repo, issue.Number)
+
+	err = database.SaveRawMessage(msgID, "github", sourceID, orgID, channelID, string(rawData), "")
+	if err != nil {
+		return fmt.Errorf("failed to save raw timeline event: %w", err)
+	}
+
+	// Build content based on event type
+	var content string
+	if event.Body != "" {
+		// Cross-reference with body
+		content = fmt.Sprintf("[%s] %s", event.Event, event.Body)
+	} else {
+		// State change event
+		content = fmt.Sprintf("[%s] Issue %s", event.Event, event.Event)
+
+		// Add details for specific event types
+		if event.Label != nil {
+			content = fmt.Sprintf("[%s] Label: %s", event.Event, event.Label.Name)
+		} else if event.Assignee != nil {
+			content = fmt.Sprintf("[%s] Assignee: %s", event.Event, event.Assignee.Login)
+		} else if event.CommitID != "" {
+			content = fmt.Sprintf("[%s] Commit: %s", event.Event, event.CommitID[:7])
+		}
+	}
+
+	normalized := &db.Message{
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     event.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       content,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      &threadID,
+		IsThreadRoot:  false,
+		Mentions:      []string{},
+		URLs:          []string{},
+		CodeBlocks:    []db.CodeBlock{},
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
+		SchemaVersion: "2.0",
+	}
+
+	return database.SaveMessage(normalized)
 }

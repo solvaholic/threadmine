@@ -178,21 +178,21 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 - ✅ SQLite schema design
 - ✅ Database layer (internal/db)
 - ✅ Command structure (fetch/select)
-- ✅ Select query engine with FTS
-- ✅ Basic rate limiting tracking
-
-### In Progress
-- 🚧 Slack search API integration
-- 🚧 GitHub search API integration
-- 🚧 Complete thread fetching
+- ✅ Select query engine with LIKE-based search
+- ✅ Rate limiting tracking (per workspace, per endpoint)
+- ✅ Slack search API integration
+- ✅ Slack complete thread fetching with rate limiting
+- ✅ GitHub search API integration (issues and PRs)
+- ✅ GitHub complete data fetching (comments, review comments, reviews, timeline)
+- ✅ Human-readable name resolution in table output
+- ✅ Smart channel name handling (prefixes, IDs, DMs)
 
 ### Planned
-- 📋 Slack thread fetching with rate limiting
-- 📋 GitHub timeline fetching
 - 📋 GitHub Discussions support
-- 📋 Classification engine
-- 📋 Identity resolution
-- 📋 Email support
+- 📋 Classification engine (question, answer, solution annotations)
+- 📋 Cross-platform identity resolution (email-based matching)
+- 📋 Email support (IMAP/mbox)
+- 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
 
 ## Development Guidelines
 

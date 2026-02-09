@@ -110,14 +110,15 @@ func (c *Client) SearchIssues(ctx context.Context, query string, limit int) ([]I
 	issues := make([]Issue, 0, len(response.Items))
 	for _, r := range response.Items {
 		issue := Issue{
-			Number:    r.Number,
-			Title:     r.Title,
-			Body:      r.Body,
-			State:     r.State,
-			User:      User{Login: r.User.Login},
-			CreatedAt: r.CreatedAt,
-			UpdatedAt: r.UpdatedAt,
-			ClosedAt:  r.ClosedAt,
+			Number:        r.Number,
+			Title:         r.Title,
+			Body:          r.Body,
+			State:         r.State,
+			User:          User{Login: r.User.Login},
+			CreatedAt:     r.CreatedAt,
+			UpdatedAt:     r.UpdatedAt,
+			ClosedAt:      r.ClosedAt,
+			RepositoryURL: r.RepositoryURL,
 		}
 		issues = append(issues, issue)
 	}
@@ -218,15 +219,16 @@ type Repository struct {
 
 // Issue represents a GitHub issue
 type Issue struct {
-	Number    int        `json:"number"`
-	Title     string     `json:"title"`
-	Body      string     `json:"body"`
-	State     string     `json:"state"`
-	User      User       `json:"user"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	ClosedAt  *time.Time `json:"closed_at"`
-	Comments  int        `json:"comments"`
+	Number        int        `json:"number"`
+	Title         string     `json:"title"`
+	Body          string     `json:"body"`
+	State         string     `json:"state"`
+	User          User       `json:"user"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	ClosedAt      *time.Time `json:"closed_at"`
+	Comments      int        `json:"comments"`
+	RepositoryURL string     `json:"repository_url"` // For org-wide searches
 }
 
 // PullRequest represents a GitHub pull request

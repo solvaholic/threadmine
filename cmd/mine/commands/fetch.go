@@ -713,12 +713,22 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		// For org-wide search, extract repo info from the issue
 		var itemOwner, itemRepo string
 		if repo == "" {
-			// Org-wide search: extract from Repository field in result
-			// The gh search adds repository info to each result
-			// For now, we'll need to parse it from the issue data
-			// This is a limitation - we'll skip items without repo info
-			fmt.Fprintf(cmd.OutOrStderr(), "Warning: org-wide search not fully implemented yet, skipping item #%d\n", item.Number)
-			continue
+			// Org-wide search: extract from RepositoryURL field
+			// Format: https://api.github.com/repos/owner/repo
+			if item.RepositoryURL == "" {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: item #%d has no repository URL, skipping\n", item.Number)
+				continue
+			}
+
+			// Extract owner/repo from URL
+			// Example: https://api.github.com/repos/github/hub -> github, hub
+			parts := strings.Split(item.RepositoryURL, "/")
+			if len(parts) < 2 {
+				fmt.Fprintf(cmd.OutOrStderr(), "Warning: invalid repository URL for item #%d, skipping\n", item.Number)
+				continue
+			}
+			itemRepo = parts[len(parts)-1]
+			itemOwner = parts[len(parts)-2]
 		} else {
 			itemOwner = owner
 			itemRepo = repo
@@ -727,7 +737,12 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "Processing item %d/%d: #%d %s\n", i+1, len(results), item.Number, item.Title)
 
 		// Create client for this specific item's repo
-		if client == nil {
+		// For org-wide searches, we need a new client for each repo
+		if repo == "" {
+			// Org-wide: create new client for each item's repo
+			client = github.NewClient(itemOwner, itemRepo)
+		} else if client == nil {
+			// Single repo: reuse client
 			client = github.NewClient(itemOwner, itemRepo)
 		}
 

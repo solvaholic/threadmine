@@ -237,23 +237,33 @@ CREATE INDEX idx_threads_resolved ON threads(is_resolved);
 CREATE INDEX idx_threads_activity ON threads(last_activity_at);
 
 -- ============================================================================
--- Annotations Layer: Semantic analysis
+-- Enrichment Layer: Basic message metadata
 -- ============================================================================
 
--- Message classifications (question, answer, solution, acknowledgment)
-CREATE TABLE IF NOT EXISTS classifications (
-    message_id TEXT NOT NULL,
-    type TEXT NOT NULL,               -- question, answer, solution, acknowledgment
-    confidence REAL NOT NULL,         -- 0.0 - 1.0
-    signals TEXT,                     -- JSON array of detection signals
-    classified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- Message enrichments (basic content features)
+CREATE TABLE IF NOT EXISTS enrichments (
+    message_id TEXT PRIMARY KEY,
 
-    PRIMARY KEY (message_id, type),
+    -- Question detection
+    is_question BOOLEAN DEFAULT 0,
+
+    -- Content metrics
+    char_count INTEGER NOT NULL,
+    word_count INTEGER NOT NULL,
+
+    -- Content features
+    has_code BOOLEAN DEFAULT 0,
+    has_links BOOLEAN DEFAULT 0,
+    has_quotes BOOLEAN DEFAULT 0,
+
+    -- Provenance
+    enriched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_classifications_type ON classifications(type);
-CREATE INDEX idx_classifications_confidence ON classifications(confidence);
+CREATE INDEX idx_enrichments_is_question ON enrichments(is_question);
+CREATE INDEX idx_enrichments_has_code ON enrichments(has_code);
 
 -- Extracted entities (mentions, URLs, technical terms)
 CREATE TABLE IF NOT EXISTS entities (

@@ -4,11 +4,13 @@ Search and analyze conversations across Slack, GitHub, and email - no admin requ
 
 ## Overview
 
-ThreadMine (`mine`) is a command-line tool that searches conversations from multiple platforms, stores them locally in SQLite, and provides powerful query capabilities for analysis.
+ThreadMine (`mine`) is a command-line tool for message ingest, storage, and retrieval. It fetches conversations from multiple platforms (Slack, GitHub, email), stores them locally in SQLite with basic enrichment metadata, and provides query capabilities for downstream analysis tools.
 
 **Two-mode architecture:**
-- **Fetch**: Search upstream sources (Slack, GitHub, etc.) and retrieve complete threads
-- **Select**: Query and analyze locally cached data
+- **Fetch**: Search upstream sources and retrieve complete threads with basic enrichment
+- **Select**: Query and filter locally cached data
+
+ThreadMine focuses on data collection. Advanced analysis (NLP, graph analysis, generative AI) is handled by separate tools that consume ThreadMine's data.
 
 ## Quick Start
 
@@ -58,7 +60,7 @@ Raw Layer (source-specific JSON in database)
     ↓
 Normalized Layer (common schema)
     ↓
-Analysis Layer (classifications, relationships)
+Enrichment Layer (basic metadata: question flags, counts, content features)
 ```
 
 ### Storage
@@ -67,7 +69,7 @@ All data stored in `~/.threadmine/threadmine.db` (SQLite):
 - Raw messages as received from APIs
 - Normalized messages in common schema
 - User profiles and identity mappings
-- Classifications and annotations
+- Basic enrichment metadata
 - Rate limiting state
 
 ## Command Reference
@@ -153,9 +155,8 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 # Fetch your Slack messages with threads
 mine fetch slack --workspace myteam --user me --since 7d --threads
 
-# Query with classification (when implemented)
-mine select --author user_slack_U123 --since 7d | \
-  jq '.[] | select(.classifications[]?.type == "question")'
+# Query for questions (enrichment filters coming soon)
+mine select --author user_slack_U123 --since 7d --is-question
 ```
 
 ### Track GitHub issue discussion
@@ -188,10 +189,17 @@ mine select --author alice --author bob --format graph > conversation.json
 - ✅ GitHub search API integration (issues, PRs, comments, reviews, timeline)
 - ✅ GitHub Discussions support
 - ✅ Human-readable name resolution in select output
+- ✅ Basic enrichment engine
+  - Question detection, character/word counts, quote/code/link flags
+  - Code block extraction (fenced, inline, HTML)
+  - URL extraction
+  - Automatic enrichment during fetch
+
+**In Progress:**
+- 🔨 Select command enrichment filters (--is-question, --has-code, etc.)
 
 **Planned:**
 - 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
-- 📋 Message classification (question, answer, solution annotations)
 - 📋 Cross-platform identity resolution (email-based matching)
 - 📋 Email support (IMAP/mbox)
 

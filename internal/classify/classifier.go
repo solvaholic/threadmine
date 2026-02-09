@@ -3,64 +3,43 @@ package classify
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/solvaholic/threadmine/internal/normalize"
 )
 
-// Classification represents a message classification with confidence score
-type Classification struct {
-	Type       string   `json:"type"`       // "question", "answer", "solution", "acknowledgment"
-	Confidence float64  `json:"confidence"` // 0.0 to 1.0
-	Signals    []string `json:"signals"`    // What triggered this classification
+// Enrichment represents basic message metadata
+type Enrichment struct {
+	MessageID  string `json:"message_id"`
+	IsQuestion bool   `json:"is_question"`
+	CharCount  int    `json:"char_count"`
+	WordCount  int    `json:"word_count"`
+	HasCode    bool   `json:"has_code"`
+	HasLinks   bool   `json:"has_links"`
+	HasQuotes  bool   `json:"has_quotes"`
 }
 
-// ClassifyMessage analyzes a message and returns all applicable classifications
-func ClassifyMessage(msg *normalize.NormalizedMessage, threadContext *ThreadContext) []Classification {
-	var classifications []Classification
-
-	// Check for question
-	if q := classifyQuestion(msg); q != nil {
-		classifications = append(classifications, *q)
+// EnrichMessage analyzes a message and returns basic enrichment metadata
+func EnrichMessage(msg *normalize.NormalizedMessage) *Enrichment {
+	return &Enrichment{
+		MessageID:  msg.ID,
+		IsQuestion: detectQuestion(msg),
+		CharCount:  len(msg.Content),
+		WordCount:  countWords(msg.Content),
+		HasCode:    len(msg.CodeBlocks) > 0,
+		HasLinks:   len(msg.URLs) > 0,
+		HasQuotes:  detectQuotes(msg.Content),
 	}
-
-	// Check for answer (requires thread context)
-	if threadContext != nil {
-		if a := classifyAnswer(msg, threadContext); a != nil {
-			classifications = append(classifications, *a)
-		}
-	}
-
-	// Check for solution
-	if s := classifySolution(msg); s != nil {
-		classifications = append(classifications, *s)
-	}
-
-	// Check for acknowledgment
-	if ack := classifyAcknowledgment(msg); ack != nil {
-		classifications = append(classifications, *ack)
-	}
-
-	return classifications
 }
 
-// ThreadContext provides context about the thread for better classification
-type ThreadContext struct {
-	HasQuestion    bool   // Does the thread contain a question?
-	QuestionAuthor string // Who asked the question?
-	IsThreadRoot   bool   // Is this the first message in the thread?
-	Position       int    // Position in thread (0 = root)
-}
-
-// classifyQuestion detects if a message is asking a question
-func classifyQuestion(msg *normalize.NormalizedMessage) *Classification {
+// detectQuestion checks if a message looks like a question
+// Uses existing patterns: question marks, question words, help-seeking phrases
+func detectQuestion(msg *normalize.NormalizedMessage) bool {
 	content := strings.ToLower(msg.Content)
-	var signals []string
-	confidence := 0.0
 
 	// Strong signal: Contains question mark
 	if strings.Contains(content, "?") {
-		signals = append(signals, "question_mark")
-		confidence += 0.4
+		return true
 	}
 
 	// Question words at start
@@ -81,321 +60,57 @@ func classifyQuestion(msg *normalize.NormalizedMessage) *Classification {
 
 	for _, starter := range questionStarters {
 		if strings.HasPrefix(content, starter) {
-			signals = append(signals, "question_starter:"+starter)
-			confidence += 0.5
-			break
+			return true
 		}
 	}
 
-	// Help-seeking phrases
-	helpPhrases := []string{
-		"help", "stuck", "issue", "problem", "error",
-		"not working", "doesn't work", "can't get", "unable to",
-		"trying to", "need to", "want to",
-		"anyone else", "has anyone",
-	}
-
-	for _, phrase := range helpPhrases {
-		if strings.Contains(content, phrase) {
-			signals = append(signals, "help_phrase:"+phrase)
-			confidence += 0.2
-			break
+	// Help-seeking phrases (require both the phrase and reasonable message length)
+	if len(msg.Content) > 20 {
+		helpPhrases := []string{
+			"help me", "stuck on", "having trouble", "problem with",
+			"error with", "not working", "doesn't work", "can't get",
+			"unable to", "trying to figure", "need help",
 		}
-	}
 
-	// Moderate confidence if we have signals
-	if len(signals) == 0 {
-		return nil
-	}
-
-	// Cap confidence at 1.0
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	// Minimum confidence threshold
-	if confidence < 0.2 {
-		return nil
-	}
-
-	return &Classification{
-		Type:       "question",
-		Confidence: confidence,
-		Signals:    signals,
-	}
-}
-
-// classifyAnswer detects if a message is providing an answer
-func classifyAnswer(msg *normalize.NormalizedMessage, ctx *ThreadContext) *Classification {
-	// Must be in a thread with a question
-	if !ctx.HasQuestion {
-		return nil
-	}
-
-	// Thread root can't be an answer (it's usually the question)
-	if ctx.IsThreadRoot {
-		return nil
-	}
-
-	// Don't classify the question author's own messages as answers (unless they answer themselves)
-	// For now, assume others' messages in a question thread are potential answers
-
-	content := strings.ToLower(msg.Content)
-	var signals []string
-	confidence := 0.0
-
-	// Base confidence for being in a thread with a question
-	confidence = 0.3
-	signals = append(signals, "in_question_thread")
-
-	// Answer phrases
-	answerPhrases := []string{
-		"you can", "you should", "you need to", "you have to",
-		"try this", "try using", "try adding",
-		"the solution", "the answer", "the fix",
-		"i think", "i believe", "i suggest",
-		"here's how", "here is how",
-		"check out", "take a look",
-		"you might want", "you could",
-	}
-
-	for _, phrase := range answerPhrases {
-		if strings.Contains(content, phrase) {
-			signals = append(signals, "answer_phrase:"+phrase)
-			confidence += 0.2
-			break
-		}
-	}
-
-	// Contains code (likely a solution)
-	if len(msg.CodeBlocks) > 0 {
-		signals = append(signals, "contains_code")
-		confidence += 0.2
-	}
-
-	// Contains URLs (documentation, examples)
-	if len(msg.URLs) > 0 {
-		signals = append(signals, "contains_urls")
-		confidence += 0.1
-	}
-
-	// Longer messages are more likely to be substantive answers
-	if len(msg.Content) > 100 {
-		signals = append(signals, "substantive_length")
-		confidence += 0.1
-	}
-
-	// Cap at 1.0
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	// Must have some answer signals beyond just being in thread
-	if len(signals) <= 1 {
-		return nil
-	}
-
-	return &Classification{
-		Type:       "answer",
-		Confidence: confidence,
-		Signals:    signals,
-	}
-}
-
-// classifySolution detects if a message contains a proposed solution
-func classifySolution(msg *normalize.NormalizedMessage) *Classification {
-	content := strings.ToLower(msg.Content)
-	var signals []string
-	confidence := 0.0
-
-	// Strong signal: Contains code blocks
-	if len(msg.CodeBlocks) > 0 {
-		signals = append(signals, "code_block")
-		confidence += 0.4
-	}
-
-	// Solution indicator phrases
-	solutionPhrases := []string{
-		"try this", "try adding", "try changing",
-		"here's a fix", "here's the fix", "here's how",
-		"you can fix", "to fix this", "the fix is",
-		"the solution", "solution is",
-		"this should work", "this will work",
-		"this fixes", "this solved",
-	}
-
-	for _, phrase := range solutionPhrases {
-		if strings.Contains(content, phrase) {
-			signals = append(signals, "solution_phrase:"+phrase)
-			confidence += 0.3
-			break
-		}
-	}
-
-	// Instructions/steps (numbered or bullet points)
-	stepPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?m)^1\.|^1\)`),        // Numbered list starting with 1
-		regexp.MustCompile(`(?m)^- |^\* |^• `),     // Bullet points
-		regexp.MustCompile(`first.*then.*finally`), // Sequential instructions
-		regexp.MustCompile(`step \d+`),             // "step 1", "step 2"
-	}
-
-	for _, pattern := range stepPatterns {
-		if pattern.MatchString(content) {
-			signals = append(signals, "contains_steps")
-			confidence += 0.2
-			break
-		}
-	}
-
-	// Documentation/reference URLs
-	docPatterns := []string{
-		"docs.", "documentation", "/docs/",
-		"stackoverflow", "github.com",
-		"tutorial", "example", "guide",
-	}
-
-	for _, url := range msg.URLs {
-		urlLower := strings.ToLower(url)
-		for _, pattern := range docPatterns {
-			if strings.Contains(urlLower, pattern) {
-				signals = append(signals, "reference_url")
-				confidence += 0.25
-				break
+		for _, phrase := range helpPhrases {
+			if strings.Contains(content, phrase) {
+				return true
 			}
 		}
 	}
 
-	if len(signals) == 0 {
-		return nil
-	}
-
-	// Cap at 1.0
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	// Minimum threshold
-	if confidence < 0.25 {
-		return nil
-	}
-
-	return &Classification{
-		Type:       "solution",
-		Confidence: confidence,
-		Signals:    signals,
-	}
+	return false
 }
 
-// classifyAcknowledgment detects if a message is acknowledging/accepting a solution
-func classifyAcknowledgment(msg *normalize.NormalizedMessage) *Classification {
-	content := strings.ToLower(msg.Content)
-	var signals []string
-	confidence := 0.0
+// countWords counts words in the message content
+func countWords(content string) int {
+	// Simple word counting: split on whitespace and count non-empty segments
+	count := 0
+	inWord := false
 
-	// Thank you phrases - use word boundaries to avoid false matches
-	thankPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\bthank`),
-		regexp.MustCompile(`\bthanks\b`),
-		regexp.MustCompile(`\bthx\b`),
-		regexp.MustCompile(`\bty\b`),
-		regexp.MustCompile(`\bappreciate`),
-		regexp.MustCompile(`\bgrateful\b`),
-	}
-
-	for i, pattern := range thankPatterns {
-		if pattern.MatchString(content) {
-			phraseName := []string{"thank", "thanks", "thx", "ty", "appreciate", "grateful"}[i]
-			signals = append(signals, "thanks:"+phraseName)
-			confidence += 0.3
-			break
-		}
-	}
-
-	// Success indicators - use word boundaries and specific phrases
-	successPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\bworked\b`),
-		regexp.MustCompile(`\bworks\b`),
-		regexp.MustCompile(`(it'?s? working|now working|got it working)`),
-		regexp.MustCompile(`\bfixed\b`),
-		regexp.MustCompile(`\bsolved\b`),
-		regexp.MustCompile(`\bresolved\b`),
-		regexp.MustCompile(`that (did it|worked|fixed)`),
-		regexp.MustCompile(`exactly what i needed`),
-		regexp.MustCompile(`(this|that) (solved|fixed)`),
-		regexp.MustCompile(`got it (working|to work)`),
-	}
-
-	successPhraseNames := []string{
-		"worked", "works", "working", "fixed", "solved", "resolved",
-		"that_did_it", "exactly_needed", "this_solved", "got_it_working",
-	}
-
-	for i, pattern := range successPatterns {
-		if pattern.MatchString(content) {
-			phraseName := "success"
-			if i < len(successPhraseNames) {
-				phraseName = successPhraseNames[i]
+	for _, r := range content {
+		if unicode.IsSpace(r) {
+			if inWord {
+				count++
+				inWord = false
 			}
-			signals = append(signals, "success:"+phraseName)
-			confidence += 0.4
-			break
+		} else {
+			inWord = true
 		}
 	}
 
-	// Positive reactions (emoji/symbols)
-	positiveIndicators := []string{
-		"👍", "✓", "✔", ":+1:", ":check:", ":white_check_mark:",
-		"awesome", "great", "excellent", "brilliant",
+	// Count the last word if we ended in the middle of one
+	if inWord {
+		count++
 	}
 
-	for _, indicator := range positiveIndicators {
-		if strings.Contains(content, indicator) || strings.Contains(msg.Content, indicator) {
-			signals = append(signals, "positive_indicator")
-			confidence += 0.2
-			break
-		}
-	}
+	return count
+}
 
-	// Short affirmative messages
-	affirmatives := []string{
-		"yes!", "yep", "yup", "yeah",
-		"perfect", "exactly",
-	}
-
-	contentTrimmed := strings.TrimSpace(content)
-	for _, affirm := range affirmatives {
-		if contentTrimmed == affirm || contentTrimmed == affirm+"!" {
-			signals = append(signals, "affirmative:"+affirm)
-			confidence += 0.25
-			break
-		}
-	}
-
-	if len(signals) == 0 {
-		return nil
-	}
-
-	// Cap at 1.0
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	// Minimum threshold
-	if confidence < 0.2 {
-		return nil
-	}
-
-	// For messages with only thanks signals, require reasonable length to avoid
-	// false positives on random substring matches
-	if confidence <= 0.3 && len(msg.Content) > 100 {
-		// Long messages with only weak acknowledgment signals are likely false positives
-		return nil
-	}
-
-	return &Classification{
-		Type:       "acknowledgment",
-		Confidence: confidence,
-		Signals:    signals,
-	}
+// detectQuotes checks if the message contains markdown-style block quotes
+// Looks for lines starting with '>' (possibly preceded by whitespace)
+func detectQuotes(content string) bool {
+	// Match lines that start with optional whitespace followed by '>'
+	quotePattern := regexp.MustCompile(`(?m)^\s*>`)
+	return quotePattern.MatchString(content)
 }

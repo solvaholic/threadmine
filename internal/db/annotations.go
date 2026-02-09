@@ -1,77 +1,61 @@
 package db
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 )
 
-// Classification represents a message classification
-type Classification struct {
-	MessageID   string
-	Type        string
-	Confidence  float64
-	Signals     []string
-	ClassifiedAt time.Time
+// Enrichment represents basic message metadata
+type Enrichment struct {
+	MessageID  string
+	IsQuestion bool
+	CharCount  int
+	WordCount  int
+	HasCode    bool
+	HasLinks   bool
+	HasQuotes  bool
+	EnrichedAt time.Time
 }
 
-// SaveClassification saves a message classification
-func (db *DB) SaveClassification(class *Classification) error {
-	signals, err := json.Marshal(class.Signals)
-	if err != nil {
-		return fmt.Errorf("failed to marshal signals: %w", err)
-	}
+// SaveEnrichment saves message enrichment metadata
+func (db *DB) SaveEnrichment(enrich *Enrichment) error {
+	_, err := db.Exec(`
+		INSERT INTO enrichments (message_id, is_question, char_count, word_count, has_code, has_links, has_quotes)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(message_id) DO UPDATE SET
+			is_question = excluded.is_question,
+			char_count = excluded.char_count,
+			word_count = excluded.word_count,
+			has_code = excluded.has_code,
+			has_links = excluded.has_links,
+			has_quotes = excluded.has_quotes,
+			enriched_at = CURRENT_TIMESTAMP
+	`, enrich.MessageID, enrich.IsQuestion, enrich.CharCount, enrich.WordCount,
+	   enrich.HasCode, enrich.HasLinks, enrich.HasQuotes)
 
-	_, err = db.Exec(`
-		INSERT INTO classifications (message_id, type, confidence, signals)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(message_id, type) DO UPDATE SET
-			confidence = excluded.confidence,
-			signals = excluded.signals,
-			classified_at = CURRENT_TIMESTAMP
-	`, class.MessageID, class.Type, class.Confidence, signals)
-
 	if err != nil {
-		return fmt.Errorf("failed to save classification: %w", err)
+		return fmt.Errorf("failed to save enrichment: %w", err)
 	}
 
 	return nil
 }
 
-// GetClassifications retrieves all classifications for a message
-func (db *DB) GetClassifications(messageID string) ([]*Classification, error) {
-	rows, err := db.Query(`
-		SELECT message_id, type, confidence, signals, classified_at
-		FROM classifications
+// GetEnrichment retrieves enrichment metadata for a message
+func (db *DB) GetEnrichment(messageID string) (*Enrichment, error) {
+	enrich := &Enrichment{}
+
+	err := db.QueryRow(`
+		SELECT message_id, is_question, char_count, word_count, has_code, has_links, has_quotes, enriched_at
+		FROM enrichments
 		WHERE message_id = ?
-	`, messageID)
+	`, messageID).Scan(&enrich.MessageID, &enrich.IsQuestion, &enrich.CharCount, &enrich.WordCount,
+		&enrich.HasCode, &enrich.HasLinks, &enrich.HasQuotes, &enrich.EnrichedAt)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to query classifications: %w", err)
-	}
-	defer rows.Close()
-
-	classifications := []*Classification{}
-	for rows.Next() {
-		class := &Classification{}
-		var signals string
-
-		err := rows.Scan(&class.MessageID, &class.Type, &class.Confidence, &signals, &class.ClassifiedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan classification: %w", err)
-		}
-
-		if err := json.Unmarshal([]byte(signals), &class.Signals); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal signals: %w", err)
-		}
-
-		classifications = append(classifications, class)
+		return nil, fmt.Errorf("failed to query enrichment: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating classifications: %w", err)
-	}
-
-	return classifications, nil
+	return enrich, nil
 }
 
 // Entity represents an extracted entity

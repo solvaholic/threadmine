@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solvaholic/threadmine/internal/classify"
 	"github.com/solvaholic/threadmine/internal/db"
 	"github.com/solvaholic/threadmine/internal/github"
+	"github.com/solvaholic/threadmine/internal/normalize"
 	"github.com/solvaholic/threadmine/internal/slack"
 	"github.com/spf13/cobra"
 )
@@ -436,6 +438,47 @@ func storeSlackMessage(database *db.DB, msg interface{}, teamID, channelID strin
 		return fmt.Errorf("failed to save normalized message: %w", err)
 	}
 
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
+}
+
+// enrichAndSaveMessage enriches a message and saves the enrichment metadata
+func enrichAndSaveMessage(database *db.DB, msg *db.Message) error {
+	// Convert db.CodeBlock to normalize.CodeBlock
+	codeBlocks := make([]normalize.CodeBlock, len(msg.CodeBlocks))
+	for i, cb := range msg.CodeBlocks {
+		codeBlocks[i] = normalize.CodeBlock{
+			Language: cb.Language,
+			Code:     cb.Code,
+		}
+	}
+
+	// Convert db.Message to normalize.NormalizedMessage for enrichment
+	normalized := &normalize.NormalizedMessage{
+		ID:         msg.ID,
+		Content:    msg.Content,
+		CodeBlocks: codeBlocks,
+		URLs:       msg.URLs,
+	}
+
+	// Enrich the message
+	enrichment := classify.EnrichMessage(normalized)
+
+	// Save enrichment to database
+	dbEnrichment := &db.Enrichment{
+		MessageID:  enrichment.MessageID,
+		IsQuestion: enrichment.IsQuestion,
+		CharCount:  enrichment.CharCount,
+		WordCount:  enrichment.WordCount,
+		HasCode:    enrichment.HasCode,
+		HasLinks:   enrichment.HasLinks,
+		HasQuotes:  enrichment.HasQuotes,
+	}
+
+	// Silently ignore enrichment errors - they're not critical
+	_ = database.SaveEnrichment(dbEnrichment)
 	return nil
 }
 
@@ -502,6 +545,18 @@ func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Messa
 		}
 	}
 
+	// Extract code blocks and URLs from content
+	normalizeCodeBlocks := normalize.ExtractCodeBlocks(text)
+	codeBlocks := make([]db.CodeBlock, len(normalizeCodeBlocks))
+	for i, cb := range normalizeCodeBlocks {
+		codeBlocks[i] = db.CodeBlock{
+			Language: cb.Language,
+			Code:     cb.Code,
+		}
+	}
+
+	urls := normalize.ExtractURLs(text)
+
 	return &db.Message{
 		ID:           msgID,
 		SourceType:   "slack",
@@ -514,8 +569,8 @@ func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Messa
 		ParentID:     parentID,
 		IsThreadRoot: isThreadRoot,
 		Mentions:     []string{},
-		URLs:         []string{},
-		CodeBlocks:   []db.CodeBlock{},
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		Attachments:  []db.Attachment{},
 		NormalizedAt: time.Now(),
 		SchemaVersion: "2.0",
@@ -845,25 +900,47 @@ func storeGitHubIssue(database *db.DB, issue *github.Issue, owner, repo, orgID s
 	}
 
 	// Normalize and store
+	content := fmt.Sprintf("%s\n\n%s", issue.Title, issue.Body)
+
+	// Extract code blocks and URLs from content
+	normalizeCodeBlocks := normalize.ExtractCodeBlocks(content)
+	codeBlocks := make([]db.CodeBlock, len(normalizeCodeBlocks))
+	for i, cb := range normalizeCodeBlocks {
+		codeBlocks[i] = db.CodeBlock{
+			Language: cb.Language,
+			Code:     cb.Code,
+		}
+	}
+
+	urls := normalize.ExtractURLs(content)
+
 	normalized := &db.Message{
 		ID:           msgID,
 		SourceType:   "github",
 		SourceID:     sourceID,
 		Timestamp:    issue.CreatedAt,
 		AuthorID:     user.ID,
-		Content:      fmt.Sprintf("%s\n\n%s", issue.Title, issue.Body),
+		Content:      content,
 		ChannelID:    dbChannel.ID,
 		ThreadID:     &msgID, // Issue is the thread root
 		IsThreadRoot: true,
 		Mentions:     []string{},
-		URLs:         []string{},
-		CodeBlocks:   []db.CodeBlock{},
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		Attachments:  []db.Attachment{},
 		NormalizedAt: time.Now(),
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubComment stores a GitHub issue comment
@@ -897,6 +974,18 @@ func storeGitHubComment(database *db.DB, comment *github.Comment, issue *github.
 	}
 
 	// Normalize and store
+	// Extract code blocks and URLs from content
+	normalizeCodeBlocks := normalize.ExtractCodeBlocks(comment.Body)
+	codeBlocks := make([]db.CodeBlock, len(normalizeCodeBlocks))
+	for i, cb := range normalizeCodeBlocks {
+		codeBlocks[i] = db.CodeBlock{
+			Language: cb.Language,
+			Code:     cb.Code,
+		}
+	}
+
+	urls := normalize.ExtractURLs(comment.Body)
+
 	normalized := &db.Message{
 		ID:           msgID,
 		SourceType:   "github",
@@ -909,14 +998,22 @@ func storeGitHubComment(database *db.DB, comment *github.Comment, issue *github.
 		ParentID:     &threadID, // Reply to the issue
 		IsThreadRoot: false,
 		Mentions:     []string{},
-		URLs:         []string{},
-		CodeBlocks:   []db.CodeBlock{},
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		Attachments:  []db.Attachment{},
 		NormalizedAt: time.Now(),
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubReviewComment stores a GitHub PR review comment
@@ -950,6 +1047,18 @@ func storeGitHubReviewComment(database *db.DB, comment *github.ReviewComment, pr
 	// Include file path context in content
 	content := fmt.Sprintf("[%s:%d] %s", comment.Path, comment.Line, comment.Body)
 
+	// Extract code blocks and URLs from content
+	normalizeCodeBlocks := normalize.ExtractCodeBlocks(content)
+	codeBlocks := make([]db.CodeBlock, len(normalizeCodeBlocks))
+	for i, cb := range normalizeCodeBlocks {
+		codeBlocks[i] = db.CodeBlock{
+			Language: cb.Language,
+			Code:     cb.Code,
+		}
+	}
+
+	urls := normalize.ExtractURLs(content)
+
 	normalized := &db.Message{
 		ID:           msgID,
 		SourceType:   "github",
@@ -962,14 +1071,22 @@ func storeGitHubReviewComment(database *db.DB, comment *github.ReviewComment, pr
 		ParentID:     &threadID,
 		IsThreadRoot: false,
 		Mentions:     []string{},
-		URLs:         []string{},
-		CodeBlocks:   []db.CodeBlock{},
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		Attachments:  []db.Attachment{},
 		NormalizedAt: time.Now(),
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubReview stores a GitHub PR review
@@ -1027,7 +1144,15 @@ func storeGitHubReview(database *db.DB, review *github.Review, pr *github.Issue,
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubDiscussion stores a GitHub discussion as a message
@@ -1100,7 +1225,15 @@ func storeGitHubDiscussion(database *db.DB, discussion *github.Discussion, owner
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubDiscussionComment stores a discussion comment or reply as a message
@@ -1150,7 +1283,15 @@ func storeGitHubDiscussionComment(database *db.DB, comment *github.DiscussionCom
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }
 
 // storeGitHubTimelineEvent stores a significant timeline event as a message
@@ -1219,5 +1360,13 @@ func storeGitHubTimelineEvent(database *db.DB, event *github.TimelineEvent, issu
 		SchemaVersion: "2.0",
 	}
 
-	return database.SaveMessage(normalized)
+	err = database.SaveMessage(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	// Enrich the message
+	enrichAndSaveMessage(database, normalized)
+
+	return nil
 }

@@ -5,7 +5,9 @@
 
 ## Overview
 
-ThreadMine (`mine`) is a command-line tool for searching and analyzing conversations across Slack, GitHub, and email. It uses search APIs to fetch messages, stores them in a local SQLite database, and provides powerful query capabilities for analysis.
+ThreadMine (`mine`) is a command-line tool for message ingest, storage, and retrieval. It fetches conversations from Slack, GitHub, and email using search APIs, stores them in a local SQLite database with basic enrichment metadata, and provides query capabilities for downstream analysis.
+
+ThreadMine focuses on data collection and basic enrichment. Advanced natural language processing, graph analysis, and generative AI work are handled by separate analysis tools that consume ThreadMine's data.
 
 ## Core Concepts
 
@@ -21,7 +23,7 @@ Raw Layer (source-specific JSON)
     ↓
 Normalized Layer (common schema)
     ↓
-Analysis Layer (annotations, classifications, relationships)
+Enrichment Layer (basic metadata: question flags, counts, content features)
 ```
 
 ## Architecture Principles
@@ -75,7 +77,7 @@ mine select --author alice --since 30d --format jsonl | jq '.content'
 - **channels**: Channels, repos, and containers
 - **workspaces**: Slack workspaces, GitHub orgs, email accounts
 - **identities**: Canonical identities linking users across sources
-- **classifications**: Message annotations (question, answer, solution, etc.)
+- **enrichments**: Basic message metadata (question flags, counts, content features)
 - **message_relations**: Relationships between messages
 - **rate_limits**: API rate limiting state
 
@@ -100,6 +102,30 @@ type Message struct {
     Attachments  []Attachment
 }
 ```
+
+### Message Enrichment
+
+ThreadMine performs basic content analysis during message ingest to add coarse-grained metadata. This enrichment is stored in the `enrichments` table and provides quick filters for downstream analysis tools.
+
+**Enrichment fields:**
+- `is_question`: Boolean flag indicating if the message looks like a question
+  - Detected using: question marks, question words (how, what, why, when, where, who), help-seeking phrases
+  - Uses pattern matching without confidence scoring
+- `char_count`: Total character count of message content
+- `word_count`: Total word count of message content
+- `has_code`: Boolean flag indicating code block presence
+  - Extracts: fenced code blocks (```), inline code (`), HTML code tags (<code>)
+  - Language detection intentionally omitted (unreliable across Slack/GitHub/markdown)
+- `has_links`: Boolean flag indicating URL presence
+  - Extracts URLs from message content
+- `has_quotes`: Boolean flag indicating markdown-style block quotes (lines starting with '>')
+
+**Code block and URL extraction:**
+- Code blocks stored in `messages.code_blocks` (JSON array)
+- URLs stored in `messages.urls` (JSON array)
+- Extraction happens during normalization in `internal/normalize/extract.go`
+
+Advanced analysis (sentiment, topic modeling, entity extraction, semantic classification, etc.) is performed by external tools that query ThreadMine's database.
 
 ## Source-Specific Requirements
 
@@ -185,12 +211,21 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 - ✅ Slack complete thread fetching with rate limiting
 - ✅ GitHub search API integration (issues and PRs)
 - ✅ GitHub complete data fetching (comments, review comments, reviews, timeline)
+- ✅ GitHub Discussions support (GraphQL API integration with nested replies)
 - ✅ Human-readable name resolution in table output
 - ✅ Smart channel name handling (prefixes, IDs, DMs)
+- ✅ Basic enrichment engine
+  - Question detection (using patterns: question marks, question words, help-seeking phrases)
+  - Code block extraction (fenced blocks, inline code, HTML code tags)
+  - URL extraction
+  - Character and word counts
+  - Quote block detection (markdown-style '>' quotes)
+  - Automatic enrichment during message fetch
+
+### In Progress
+- 🔨 Select command enrichment filters (--is-question, --has-code, etc.)
 
 ### Planned
-- 📋 GitHub Discussions support
-- 📋 Classification engine (question, answer, solution annotations)
 - 📋 Cross-platform identity resolution (email-based matching)
 - 📋 Email support (IMAP/mbox)
 - 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
@@ -251,9 +286,8 @@ mine select --format jsonl | jq '.content'
 # Fetch your recent Slack messages with threads
 mine fetch slack --workspace myteam --user me --since 7d --threads
 
-# Find questions you asked
-mine select --author user_slack_U123 --since 7d | \
-  jq '.[] | select(.classifications[]?.type == "question")'
+# Find questions you asked (enrichment filters coming soon)
+mine select --author user_slack_U123 --since 7d --is-question
 ```
 
 ### Example 2: Track GitHub Issue Discussion

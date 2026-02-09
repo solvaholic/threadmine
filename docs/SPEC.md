@@ -27,7 +27,7 @@ Analysis Layer (annotations, classifications, relationships)
 ## Architecture Principles
 
 - **Search-first**: Use source search APIs rather than list/get APIs
-- **Complete threads**: Always fetch entire conversation threads, not just individual messages
+- **Complete threads**: Optionally fetch entire conversation threads with `--threads` flag
 - **SQLite storage**: All data in a single SQLite database for performance and portability
 - **Rate-limited**: Respect API limits (self-limit to 1/2 or 1/3 of published rates)
 - **Normalized output**: Common schema across all sources for consistent analysis
@@ -39,7 +39,7 @@ Analysis Layer (annotations, classifications, relationships)
 ```bash
 # Slack: Search-based message fetching
 mine fetch slack --workspace TEAM --user alice --channel general --since 7d
-mine fetch slack --workspace TEAM --search "kubernetes" --since 30d
+mine fetch slack --workspace TEAM --search "kubernetes" --since 30d --threads
 
 # GitHub: Search issues and PRs
 mine fetch github --repo org/repo --label bug --since 30d
@@ -106,9 +106,10 @@ type Message struct {
 ### Slack
 
 - Use search API (`search.messages`) for fetching
-- For each result:
-  - If message has `thread_ts`, fetch complete thread via `conversations.replies`
-  - If message is thread root (`ts == thread_ts`), fetch all replies
+- Thread fetching (opt-in with `--threads` flag):
+  - Extract `thread_ts` from message or permalink
+  - If `--threads` enabled and message has `thread_ts`, fetch complete thread via `conversations.replies`
+  - Without `--threads`, store only individual search results
 - Rate limiting:
   - Tier 2: 20 requests/minute → self-limit to 10 requests/minute
   - Tier 3: 50 requests/minute → self-limit to 25 requests/minute
@@ -247,8 +248,8 @@ mine select --format jsonl | jq '.content'
 
 ### Example 1: Find Your Recent Questions
 ```bash
-# Fetch your recent Slack messages
-mine fetch slack --workspace myteam --user me --since 7d
+# Fetch your recent Slack messages with threads
+mine fetch slack --workspace myteam --user me --since 7d --threads
 
 # Find questions you asked
 mine select --author user_slack_U123 --since 7d | \
@@ -266,8 +267,8 @@ mine select --search "authentication" --source github --format table
 
 ### Example 3: Multi-user Conversation Analysis
 ```bash
-# Fetch from multiple sources
-mine fetch slack --workspace myteam --channel engineering --since 14d
+# Fetch from multiple sources with threads
+mine fetch slack --workspace myteam --channel engineering --since 14d --threads
 mine fetch github --repo org/repo --since 14d
 
 # Find conversations involving specific users

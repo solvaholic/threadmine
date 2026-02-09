@@ -18,7 +18,7 @@ go build -o mine ./cmd/mine
 
 # Fetch from Slack (search-based)
 ./mine fetch slack --workspace myteam --user alice --since 7d
-./mine fetch slack --workspace myteam --search "kubernetes" --since 30d
+./mine fetch slack --workspace myteam --search "kubernetes" --since 30d --threads
 
 # Fetch from GitHub (search-based)
 ./mine fetch github --repo org/repo --label bug --since 30d
@@ -38,8 +38,8 @@ go build -o mine ./cmd/mine
 ## Key Features
 
 - **Search-first**: Uses source search APIs (Slack `search.messages`, GitHub `/search/issues`)
-- **Complete threads**: Always fetches entire conversation threads, not just individual messages
-- **SQLite storage**: Fast queries with FTS5 full-text search
+- **Complete threads**: Optionally fetches entire conversation threads with `--threads` flag
+- **SQLite storage**: Fast queries with LIKE-based search (FTS5 planned)
 - **Rate limiting**: Self-limits to 1/2 or 1/3 of API rate limits to avoid abuse
 - **Multiple formats**: JSON (default), JSONL (streaming), table (human-readable), graph (visualization)
 - **Cross-platform**: Unified schema across Slack, GitHub, and email (planned)
@@ -77,7 +77,7 @@ All data stored in `~/.threadmine/threadmine.db` (SQLite):
 ```bash
 # Slack
 mine fetch slack --workspace TEAM --user alice --channel general --since 7d
-mine fetch slack --workspace TEAM --search "kubernetes" --since 30d
+mine fetch slack --workspace TEAM --search "kubernetes" --since 30d --threads
 
 # GitHub
 mine fetch github --repo org/repo --label bug --since 30d
@@ -150,8 +150,8 @@ TIMESTAMP           AUTHOR        CHANNEL    CONTENT
 
 ### Find your recent questions
 ```bash
-# Fetch your Slack messages
-mine fetch slack --workspace myteam --user me --since 7d
+# Fetch your Slack messages with threads
+mine fetch slack --workspace myteam --user me --since 7d --threads
 
 # Query with classification (when implemented)
 mine select --author user_slack_U123 --since 7d | \
@@ -169,8 +169,8 @@ mine select --search "authentication" --source github --format table
 
 ### Analyze multi-user conversations
 ```bash
-# Fetch from multiple sources
-mine fetch slack --workspace myteam --channel engineering --since 14d
+# Fetch from multiple sources with threads
+mine fetch slack --workspace myteam --channel engineering --since 14d --threads
 mine fetch github --repo org/repo --since 14d
 
 # Find conversations between specific users
@@ -182,19 +182,18 @@ mine select --author alice --author bob --format graph > conversation.json
 **Completed:**
 - ✅ SQLite schema and database layer
 - ✅ Command structure (fetch/select)
-- ✅ Full-text search (FTS5)
+- ✅ LIKE-based search (works across all SQLite builds)
 - ✅ Rate limiting framework
-
-**In Progress:**
-- 🚧 Slack search API integration
-- 🚧 GitHub search API integration
-- 🚧 Complete thread fetching
+- ✅ Slack search API integration with thread fetching
+- ✅ GitHub search API integration (issues, PRs, comments, reviews, timeline)
+- ✅ GitHub Discussions support
+- ✅ Human-readable name resolution in select output
 
 **Planned:**
-- 📋 Message classification
-- 📋 Identity resolution
-- 📋 Email support
-- 📋 GitHub Discussions
+- 📋 FTS5 full-text search (requires sqlite3 build with FTS5)
+- 📋 Message classification (question, answer, solution annotations)
+- 📋 Cross-platform identity resolution (email-based matching)
+- 📋 Email support (IMAP/mbox)
 
 ## Documentation
 

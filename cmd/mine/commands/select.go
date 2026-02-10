@@ -83,6 +83,74 @@ func init() {
 }
 
 func runSelect(cmd *cobra.Command, args []string) error {
+	// Apply config defaults for flags that weren't explicitly set
+	if globalConfig != nil {
+		if !cmd.Flags().Changed("since") && globalConfig.HasKey("select.since") {
+			selectSince = globalConfig.GetString("select.since")
+		}
+		if !cmd.Flags().Changed("until") && globalConfig.HasKey("select.until") {
+			selectUntil = globalConfig.GetString("select.until")
+		}
+		if !cmd.Flags().Changed("limit") && globalConfig.HasKey("select.limit") {
+			selectLimit = globalConfig.GetIntWithFallback("select.limit", selectLimit)
+		}
+		if !cmd.Flags().Changed("offset") && globalConfig.HasKey("select.offset") {
+			selectOffset = globalConfig.GetIntWithFallback("select.offset", selectOffset)
+		}
+		if !cmd.Flags().Changed("search") && globalConfig.HasKey("select.search") {
+			selectSearch = globalConfig.GetString("select.search")
+		}
+		if !cmd.Flags().Changed("thread") && globalConfig.HasKey("select.thread") {
+			selectThreadID = globalConfig.GetString("select.thread")
+		}
+		// Handle format flag from root command
+		if !cmd.Flags().Changed("format") && globalConfig.HasKey("select.format") {
+			outputFormat = globalConfig.GetString("select.format")
+		}
+		// String slice flags need special handling
+		if !cmd.Flags().Changed("author") && globalConfig.HasKey("select.author") {
+			authors := globalConfig.GetString("select.author")
+			if authors != "" {
+				selectAuthors = strings.Split(authors, ",")
+				// Trim spaces
+				for i := range selectAuthors {
+					selectAuthors[i] = strings.TrimSpace(selectAuthors[i])
+				}
+			}
+		}
+		if !cmd.Flags().Changed("channel") && globalConfig.HasKey("select.channel") {
+			channels := globalConfig.GetString("select.channel")
+			if channels != "" {
+				selectChannels = strings.Split(channels, ",")
+				for i := range selectChannels {
+					selectChannels[i] = strings.TrimSpace(selectChannels[i])
+				}
+			}
+		}
+		if !cmd.Flags().Changed("source") && globalConfig.HasKey("select.source") {
+			sources := globalConfig.GetString("select.source")
+			if sources != "" {
+				selectSources = strings.Split(sources, ",")
+				for i := range selectSources {
+					selectSources[i] = strings.TrimSpace(selectSources[i])
+				}
+			}
+		}
+		// Boolean enrichment filters
+		if !cmd.Flags().Changed("is-question") && globalConfig.HasKey("select.is-question") {
+			selectIsQuestion = globalConfig.GetBool("select.is-question")
+		}
+		if !cmd.Flags().Changed("has-code") && globalConfig.HasKey("select.has-code") {
+			selectHasCode = globalConfig.GetBool("select.has-code")
+		}
+		if !cmd.Flags().Changed("has-links") && globalConfig.HasKey("select.has-links") {
+			selectHasLinks = globalConfig.GetBool("select.has-links")
+		}
+		if !cmd.Flags().Changed("has-quotes") && globalConfig.HasKey("select.has-quotes") {
+			selectHasQuotes = globalConfig.GetBool("select.has-quotes")
+		}
+	}
+
 	// Open database
 	dbPathResolved := dbPath
 	if dbPathResolved == "" {

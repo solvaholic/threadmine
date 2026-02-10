@@ -38,6 +38,36 @@ make build
 ./mine select --help
 ```
 
+## Configuration
+
+ThreadMine supports optional configuration via `~/.threadmine/config`.
+
+Configuration provides convenient defaults for commonly-used flags. CLI flags always override config values.
+
+**Example config** (`~/.threadmine/config`):
+
+```ini
+[fetch.slack]
+    workspace = myteam
+    search = from:@myusername
+    since = 7d
+
+[fetch.github]
+    org = myorg
+    commenter = myusername
+    limit = 999
+    since = 7d
+
+[select]
+    author = myusername
+    since = 7d
+    format = table
+```
+
+**Priority order**: Built-in defaults → Config file values → CLI flags (flags always win)
+
+See [`docs/config.example`](docs/config.example) for all available configuration options.
+
 ## Key Features
 
 - **Search-first**: Uses source search APIs (Slack `search.messages`, GitHub `/search/issues`)

@@ -126,12 +126,11 @@ func init() {
 	fetchGitHubCmd.Flags().IntVar(&fetchLimit, "limit", 100, "Maximum number of items to fetch")
 
 	// Slack flags
-	fetchSlackCmd.Flags().StringVar(&slackWorkspace, "workspace", "", "Slack workspace/team name (required)")
+	fetchSlackCmd.Flags().StringVar(&slackWorkspace, "workspace", "", "Slack workspace/team name (required unless set in config)")
 	fetchSlackCmd.Flags().StringVar(&slackUser, "user", "", "Filter by user (login name or 'me')")
 	fetchSlackCmd.Flags().StringVar(&slackChannel, "channel", "", "Filter by channel name")
 	fetchSlackCmd.Flags().StringVar(&slackSearch, "search", "", "Search query text")
 	fetchSlackCmd.Flags().BoolVar(&slackThreads, "threads", false, "Fetch complete threads for messages that are part of threads")
-	fetchSlackCmd.MarkFlagRequired("workspace")
 
 	// GitHub flags
 	fetchGitHubCmd.Flags().StringVar(&githubOrg, "org", "", "Organization name (use with --repo for single repo, or alone for org-wide search)")
@@ -147,6 +146,39 @@ func init() {
 }
 
 func runFetchSlack(cmd *cobra.Command, args []string) error {
+	// Apply config defaults for flags that weren't explicitly set
+	if globalConfig != nil {
+		if !cmd.Flags().Changed("workspace") && globalConfig.HasKey("fetch.slack.workspace") {
+			slackWorkspace = globalConfig.GetString("fetch.slack.workspace")
+		}
+		if !cmd.Flags().Changed("search") && globalConfig.HasKey("fetch.slack.search") {
+			slackSearch = globalConfig.GetString("fetch.slack.search")
+		}
+		if !cmd.Flags().Changed("since") && globalConfig.HasKey("fetch.slack.since") {
+			fetchSince = globalConfig.GetString("fetch.slack.since")
+		}
+		if !cmd.Flags().Changed("until") && globalConfig.HasKey("fetch.slack.until") {
+			fetchUntil = globalConfig.GetString("fetch.slack.until")
+		}
+		if !cmd.Flags().Changed("limit") && globalConfig.HasKey("fetch.slack.limit") {
+			fetchLimit = globalConfig.GetIntWithFallback("fetch.slack.limit", fetchLimit)
+		}
+		if !cmd.Flags().Changed("user") && globalConfig.HasKey("fetch.slack.user") {
+			slackUser = globalConfig.GetString("fetch.slack.user")
+		}
+		if !cmd.Flags().Changed("channel") && globalConfig.HasKey("fetch.slack.channel") {
+			slackChannel = globalConfig.GetString("fetch.slack.channel")
+		}
+		if !cmd.Flags().Changed("threads") && globalConfig.HasKey("fetch.slack.threads") {
+			slackThreads = globalConfig.GetBool("fetch.slack.threads")
+		}
+	}
+
+	// Validate required fields
+	if slackWorkspace == "" {
+		return fmt.Errorf("--workspace is required (or set fetch.slack.workspace in config)")
+	}
+
 	// Open database
 	dbPathResolved := dbPath
 	if dbPathResolved == "" {
@@ -588,6 +620,43 @@ func parseSlackTimestamp(ts string) (time.Time, error) {
 }
 
 func runFetchGitHub(cmd *cobra.Command, args []string) error {
+	// Apply config defaults for flags that weren't explicitly set
+	if globalConfig != nil {
+		if !cmd.Flags().Changed("org") && globalConfig.HasKey("fetch.github.org") {
+			githubOrg = globalConfig.GetString("fetch.github.org")
+		}
+		if !cmd.Flags().Changed("repo") && globalConfig.HasKey("fetch.github.repo") {
+			githubRepo = globalConfig.GetString("fetch.github.repo")
+		}
+		if !cmd.Flags().Changed("author") && globalConfig.HasKey("fetch.github.author") {
+			githubAuthor = globalConfig.GetString("fetch.github.author")
+		}
+		if !cmd.Flags().Changed("commenter") && globalConfig.HasKey("fetch.github.commenter") {
+			githubCommenter = globalConfig.GetString("fetch.github.commenter")
+		}
+		if !cmd.Flags().Changed("reviewer") && globalConfig.HasKey("fetch.github.reviewer") {
+			githubReviewer = globalConfig.GetString("fetch.github.reviewer")
+		}
+		if !cmd.Flags().Changed("label") && globalConfig.HasKey("fetch.github.label") {
+			githubLabel = globalConfig.GetString("fetch.github.label")
+		}
+		if !cmd.Flags().Changed("search") && globalConfig.HasKey("fetch.github.search") {
+			githubSearch = globalConfig.GetString("fetch.github.search")
+		}
+		if !cmd.Flags().Changed("type") && globalConfig.HasKey("fetch.github.type") {
+			githubType = globalConfig.GetString("fetch.github.type")
+		}
+		if !cmd.Flags().Changed("since") && globalConfig.HasKey("fetch.github.since") {
+			fetchSince = globalConfig.GetString("fetch.github.since")
+		}
+		if !cmd.Flags().Changed("until") && globalConfig.HasKey("fetch.github.until") {
+			fetchUntil = globalConfig.GetString("fetch.github.until")
+		}
+		if !cmd.Flags().Changed("limit") && globalConfig.HasKey("fetch.github.limit") {
+			fetchLimit = globalConfig.GetIntWithFallback("fetch.github.limit", fetchLimit)
+		}
+	}
+
 	// Open database
 	dbPathResolved := dbPath
 	if dbPathResolved == "" {
@@ -636,7 +705,7 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		repo = "" // No specific repo
 		searchScope = fmt.Sprintf("org:%s", owner)
 	} else {
-		return fmt.Errorf("either --org or --repo is required")
+		return fmt.Errorf("either --org or --repo is required (or set fetch.github.org in config)")
 	}
 
 	// Build search query for GitHub

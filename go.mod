@@ -6,6 +6,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/rneatherway/slack v0.0.0-20251202152516-e4fa895c1c51
 	github.com/spf13/cobra v1.10.2
+	gopkg.in/ini.v1 v1.67.0
 )
 
 require (

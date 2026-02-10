@@ -1,0 +1,81 @@
+# ThreadMine Configuration File
+# Location: ~/.threadmine/config
+#
+# All settings are optional. CLI flags always override config values.
+#
+# Syntax:
+#   [section.subsection]
+#       key = value
+
+# ===== Slack Fetch Defaults =====
+[fetch.slack]
+    # Workspace name (required unless provided via --workspace flag)
+    # workspace = workspace_name
+
+    # Search query (use Slack search syntax)
+    # search = from:user_name
+
+    # Time range for fetching messages
+    # since = 7d
+    # until = 2026-01-01
+
+    # Maximum messages to fetch (default: 1000)
+    # limit = 1000
+
+    # Optional: filter by specific user or channel
+    # user = me
+    # channel = random
+
+    # Fetch complete threads (default: false)
+    # threads = true
+
+# ===== GitHub Fetch Defaults =====
+[fetch.github]
+    # Organization or owner name
+    # org = org_name
+
+    # Filter by comment author
+    # commenter = user_name
+
+    # Maximum items to fetch (default: 100)
+    # limit = 999
+
+    # Time range for fetching messages
+    # since = 7d
+    # until = 2026-01-01
+
+    # Optional filters
+    # repo = cli
+    # author = username
+    # reviewer = username
+    # label = bug
+    # search = "search query"
+    # type = pr  # or: issue, all
+
+# ===== Select (Query) Defaults =====
+[select]
+    # Filter by message author(s)
+    # author = user_name
+    # Multiple authors: use comma-separated
+    # author = alice,bob,charlie
+
+    # Time range
+    # since = 7d
+    # until = 2026-01-01
+
+    # Output format: json, jsonl, table, graph
+    # format = table
+
+    # Optional filters
+    # channel = engineering,general
+    # source = slack,github
+    # search = "full text search"
+    # thread = thread_id_here
+    # limit = 100
+    # offset = 0
+
+    # Enrichment filters
+    # is-question = true
+    # has-code = true
+    # has-links = true
+    # has-quotes = true

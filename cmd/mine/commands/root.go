@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/solvaholic/threadmine/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,9 @@ var (
 	// Global flags
 	outputFormat string
 	dbPath       string
+
+	// Global config
+	globalConfig *config.Config
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -35,6 +39,14 @@ func Execute() error {
 }
 
 func init() {
+	// Load configuration file
+	cfg, err := config.Load()
+	if err != nil {
+		// Non-fatal: continue without config if it fails to load
+		fmt.Fprintf(os.Stderr, "Warning: failed to load config: %v\n", err)
+	}
+	globalConfig = cfg
+
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "json", "Output format (json, jsonl, table)")
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Database path (default: ~/.threadmine/threadmine.db)")

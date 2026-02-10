@@ -708,6 +708,11 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("either --org or --repo is required (or set fetch.github.org in config)")
 	}
 
+	// When --reviewer is set, automatically assume --type pr
+	if githubReviewer != "" && githubType == "all" {
+		githubType = "pr"
+	}
+
 	// Build search query for GitHub
 	queryParts := []string{searchScope}
 
@@ -716,6 +721,9 @@ func runFetchGitHub(cmd *cobra.Command, args []string) error {
 	}
 	if githubCommenter != "" {
 		queryParts = append(queryParts, fmt.Sprintf("commenter:%s", githubCommenter))
+	}
+	if githubReviewer != "" {
+		queryParts = append(queryParts, fmt.Sprintf("reviewed-by:%s", githubReviewer))
 	}
 	if githubLabel != "" {
 		queryParts = append(queryParts, fmt.Sprintf("label:%s", githubLabel))

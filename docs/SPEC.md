@@ -352,4 +352,4 @@ mine select --author alice --author bob --format graph > conversation.json
 
 **Repository**: https://github.com/solvaholic/threadmine
 **License**: MIT
-**Language**: Go 1.25+
+**Language**: Go 1.26+

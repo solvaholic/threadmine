@@ -282,7 +282,7 @@ mine select --author alice --author bob --format graph > conversation.json
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.26+
 - Make (for automated building)
 - SQLite with FTS5 support (via `github.com/mattn/go-sqlite3`)
   - Automatically enabled with `make build`

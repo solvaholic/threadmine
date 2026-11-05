@@ -166,11 +166,11 @@ func (db *DB) Stats() (*Stats, error) {
 
 // Stats represents database statistics
 type Stats struct {
-	MessageCount     int64
-	UserCount        int64
-	ChannelCount     int64
-	ThreadCount      int64
-	EarliestMessage  *time.Time
-	LatestMessage    *time.Time
-	DatabaseSize     int64
+	MessageCount    int64
+	UserCount       int64
+	ChannelCount    int64
+	ThreadCount     int64
+	EarliestMessage *time.Time
+	LatestMessage   *time.Time
+	DatabaseSize    int64
 }

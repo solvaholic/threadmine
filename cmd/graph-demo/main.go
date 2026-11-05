@@ -38,12 +38,12 @@ func main() {
 			threadsWithReplies++
 			thread := g.GetThread(rootID)
 			depth := g.GetThreadDepth(rootID)
-			
+
 			fmt.Printf("\nThread Root: %s\n", rootID)
 			fmt.Printf("  Messages: %d\n", len(thread))
 			fmt.Printf("  Depth: %d\n", depth)
 			fmt.Printf("  Direct Replies: %d\n", len(children))
-			
+
 			// Display thread structure
 			fmt.Printf("  Structure:\n")
 			for i, node := range thread {

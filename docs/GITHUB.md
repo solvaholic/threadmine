@@ -112,14 +112,21 @@ GitHub data is stored in the ThreadMine cache following the SPEC.md structure:
 - **Real Name**: User's full name (if available)
 - **Email**: User's email (if public)
 
-## Message Classification
+## Message Enrichment
 
-GitHub messages are automatically classified using ThreadMine's heuristic classifier:
+GitHub messages receive basic enrichment metadata during fetch:
 
-- **Questions**: Detected in issue/PR titles and bodies with question marks or help-seeking phrases
-- **Answers**: Responses in threads that follow questions
-- **Solutions**: Messages with code blocks, step-by-step instructions
-- **Acknowledgments**: Thank you messages, "that worked" confirmations
+- **Question flag**: Pattern matching for question marks, question starters, and help-seeking phrases, without confidence scoring
+- **Counts**: Content length and whitespace-separated word count
+- **Content flags**: Code blocks and links extracted during normalization, plus markdown-style block quotes
+
+Answers, solutions, and acknowledgments are not classified. Advanced analysis belongs in downstream tools; see the Message Enrichment section of [SPEC.md](SPEC.md).
+
+Run the local enrichment demo without fetching data:
+
+```bash
+go run ./cmd/enrich-demo
+```
 
 ## Graph Analysis
 
@@ -135,10 +142,10 @@ GitHub conversations are included in ThreadMine's reply graph:
 
 ```bash
 # Fetch data
-./mine fetch github --owner facebook --repo react
+./mine fetch github --repo facebook/react
 
-# Query for questions (via classification)
-./mine messages --source github | jq '.messages[] | select(.classifications[]? | .type == "question")'
+# Query for questions using the enrichment filter
+./mine select --source github --is-question
 ```
 
 ### Analyze PR Review Conversations

@@ -86,7 +86,7 @@ func (g *ReplyGraph) GetChildren(messageID string) []string {
 // GetThread returns all messages in a thread, starting from the root
 func (g *ReplyGraph) GetThread(rootID string) []*MessageNode {
 	result := []*MessageNode{}
-	
+
 	// Check if the root exists
 	root, exists := g.Nodes[rootID]
 	if !exists {
@@ -166,12 +166,12 @@ func (g *ReplyGraph) Stats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_messages":         totalMessages,
-		"thread_count":           threadCount,
-		"reply_messages":         replyMessages,
-		"messages_with_replies":  messagesWithReplies,
-		"average_thread_depth":   avgDepth,
-		"updated_at":             g.UpdatedAt.Format(time.RFC3339),
+		"total_messages":        totalMessages,
+		"thread_count":          threadCount,
+		"reply_messages":        replyMessages,
+		"messages_with_replies": messagesWithReplies,
+		"average_thread_depth":  avgDepth,
+		"updated_at":            g.UpdatedAt.Format(time.RFC3339),
 	}
 }
 

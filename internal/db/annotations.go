@@ -31,7 +31,7 @@ func (db *DB) SaveEnrichment(enrich *Enrichment) error {
 			has_quotes = excluded.has_quotes,
 			enriched_at = CURRENT_TIMESTAMP
 	`, enrich.MessageID, enrich.IsQuestion, enrich.CharCount, enrich.WordCount,
-	   enrich.HasCode, enrich.HasLinks, enrich.HasQuotes)
+		enrich.HasCode, enrich.HasLinks, enrich.HasQuotes)
 
 	if err != nil {
 		return fmt.Errorf("failed to save enrichment: %w", err)

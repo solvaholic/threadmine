@@ -89,9 +89,9 @@ Examples:
 
 var (
 	// Common fetch flags
-	fetchSince  string
-	fetchUntil  string
-	fetchLimit  int
+	fetchSince string
+	fetchUntil string
+	fetchLimit int
 
 	// Slack-specific flags
 	slackWorkspace string
@@ -405,11 +405,11 @@ func storeSlackMessage(database *db.DB, msg interface{}, teamID, channelID strin
 	// Store user info if we have it
 	if userID != "" {
 		user := &db.User{
-			ID:          fmt.Sprintf("user_slack_%s", userID),
-			SourceType:  "slack",
-			SourceID:    userID,
-			FetchedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
+			ID:         fmt.Sprintf("user_slack_%s", userID),
+			SourceType: "slack",
+			SourceID:   userID,
+			FetchedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 		if username != "" {
 			user.DisplayName = &username
@@ -590,21 +590,21 @@ func normalizeSlackMessage(msg interface{}, teamID, channelID string) (*db.Messa
 	urls := normalize.ExtractURLs(text)
 
 	return &db.Message{
-		ID:           msgID,
-		SourceType:   "slack",
-		SourceID:     fmt.Sprintf("%s_%s", channelID, timestamp),
-		Timestamp:    ts,
-		AuthorID:     userID,
-		Content:      text, // Use the text variable
-		ChannelID:    chanID,
-		ThreadID:     threadID,
-		ParentID:     parentID,
-		IsThreadRoot: isThreadRoot,
-		Mentions:     []string{},
-		URLs:         urls,
-		CodeBlocks:   codeBlocks,
-		Attachments:  []db.Attachment{},
-		NormalizedAt: time.Now(),
+		ID:            msgID,
+		SourceType:    "slack",
+		SourceID:      fmt.Sprintf("%s_%s", channelID, timestamp),
+		Timestamp:     ts,
+		AuthorID:      userID,
+		Content:       text, // Use the text variable
+		ChannelID:     chanID,
+		ThreadID:      threadID,
+		ParentID:      parentID,
+		IsThreadRoot:  isThreadRoot,
+		Mentions:      []string{},
+		URLs:          urls,
+		CodeBlocks:    codeBlocks,
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
 		SchemaVersion: "2.0",
 	}, nil
 }
@@ -1007,20 +1007,20 @@ func storeGitHubIssue(database *db.DB, issue *github.Issue, owner, repo, orgID s
 	urls := normalize.ExtractURLs(content)
 
 	normalized := &db.Message{
-		ID:           msgID,
-		SourceType:   "github",
-		SourceID:     sourceID,
-		Timestamp:    issue.CreatedAt,
-		AuthorID:     user.ID,
-		Content:      content,
-		ChannelID:    dbChannel.ID,
-		ThreadID:     &msgID, // Issue is the thread root
-		IsThreadRoot: true,
-		Mentions:     []string{},
-		URLs:         urls,
-		CodeBlocks:   codeBlocks,
-		Attachments:  []db.Attachment{},
-		NormalizedAt: time.Now(),
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     issue.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       content,
+		ChannelID:     dbChannel.ID,
+		ThreadID:      &msgID, // Issue is the thread root
+		IsThreadRoot:  true,
+		Mentions:      []string{},
+		URLs:          urls,
+		CodeBlocks:    codeBlocks,
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
 		SchemaVersion: "2.0",
 	}
 
@@ -1079,21 +1079,21 @@ func storeGitHubComment(database *db.DB, comment *github.Comment, issue *github.
 	urls := normalize.ExtractURLs(comment.Body)
 
 	normalized := &db.Message{
-		ID:           msgID,
-		SourceType:   "github",
-		SourceID:     sourceID,
-		Timestamp:    comment.CreatedAt,
-		AuthorID:     user.ID,
-		Content:      comment.Body,
-		ChannelID:    channelID,
-		ThreadID:     &threadID,
-		ParentID:     &threadID, // Reply to the issue
-		IsThreadRoot: false,
-		Mentions:     []string{},
-		URLs:         urls,
-		CodeBlocks:   codeBlocks,
-		Attachments:  []db.Attachment{},
-		NormalizedAt: time.Now(),
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     comment.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       comment.Body,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      &threadID, // Reply to the issue
+		IsThreadRoot:  false,
+		Mentions:      []string{},
+		URLs:          urls,
+		CodeBlocks:    codeBlocks,
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
 		SchemaVersion: "2.0",
 	}
 
@@ -1152,21 +1152,21 @@ func storeGitHubReviewComment(database *db.DB, comment *github.ReviewComment, pr
 	urls := normalize.ExtractURLs(content)
 
 	normalized := &db.Message{
-		ID:           msgID,
-		SourceType:   "github",
-		SourceID:     sourceID,
-		Timestamp:    comment.CreatedAt,
-		AuthorID:     user.ID,
-		Content:      content,
-		ChannelID:    channelID,
-		ThreadID:     &threadID,
-		ParentID:     &threadID,
-		IsThreadRoot: false,
-		Mentions:     []string{},
-		URLs:         urls,
-		CodeBlocks:   codeBlocks,
-		Attachments:  []db.Attachment{},
-		NormalizedAt: time.Now(),
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     comment.CreatedAt,
+		AuthorID:      user.ID,
+		Content:       content,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      &threadID,
+		IsThreadRoot:  false,
+		Mentions:      []string{},
+		URLs:          urls,
+		CodeBlocks:    codeBlocks,
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
 		SchemaVersion: "2.0",
 	}
 
@@ -1218,21 +1218,21 @@ func storeGitHubReview(database *db.DB, review *github.Review, pr *github.Issue,
 	content := fmt.Sprintf("[%s] %s", review.State, review.Body)
 
 	normalized := &db.Message{
-		ID:           msgID,
-		SourceType:   "github",
-		SourceID:     sourceID,
-		Timestamp:    review.SubmittedAt,
-		AuthorID:     user.ID,
-		Content:      content,
-		ChannelID:    channelID,
-		ThreadID:     &threadID,
-		ParentID:     &threadID,
-		IsThreadRoot: false,
-		Mentions:     []string{},
-		URLs:         []string{},
-		CodeBlocks:   []db.CodeBlock{},
-		Attachments:  []db.Attachment{},
-		NormalizedAt: time.Now(),
+		ID:            msgID,
+		SourceType:    "github",
+		SourceID:      sourceID,
+		Timestamp:     review.SubmittedAt,
+		AuthorID:      user.ID,
+		Content:       content,
+		ChannelID:     channelID,
+		ThreadID:      &threadID,
+		ParentID:      &threadID,
+		IsThreadRoot:  false,
+		Mentions:      []string{},
+		URLs:          []string{},
+		CodeBlocks:    []db.CodeBlock{},
+		Attachments:   []db.Attachment{},
+		NormalizedAt:  time.Now(),
 		SchemaVersion: "2.0",
 	}
 

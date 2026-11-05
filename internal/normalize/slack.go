@@ -10,15 +10,15 @@ import (
 
 // SlackMessage represents the raw Slack message structure
 type SlackMessage struct {
-	Type      string                 `json:"type"`
-	User      string                 `json:"user"`
-	Text      string                 `json:"text"`
-	Timestamp string                 `json:"ts"`
-	ThreadTS  string                 `json:"thread_ts,omitempty"`
-	BotID     string                 `json:"bot_id,omitempty"`
-	Subtype   string                 `json:"subtype,omitempty"`
+	Type      string                   `json:"type"`
+	User      string                   `json:"user"`
+	Text      string                   `json:"text"`
+	Timestamp string                   `json:"ts"`
+	ThreadTS  string                   `json:"thread_ts,omitempty"`
+	BotID     string                   `json:"bot_id,omitempty"`
+	Subtype   string                   `json:"subtype,omitempty"`
 	Files     []map[string]interface{} `json:"files,omitempty"`
-	Metadata  map[string]interface{} `json:"-"` // Catch-all for other fields
+	Metadata  map[string]interface{}   `json:"-"` // Catch-all for other fields
 }
 
 // SlackChannel represents the raw Slack channel structure
@@ -35,8 +35,8 @@ type SlackUser struct {
 	Name     string `json:"name"`
 	RealName string `json:"real_name"`
 	Profile  struct {
-		Email     string `json:"email"`
-		Image192  string `json:"image_192"`
+		Email    string `json:"email"`
+		Image192 string `json:"image_192"`
 	} `json:"profile"`
 }
 
@@ -63,7 +63,7 @@ func SlackToNormalized(msg *SlackMessage, channel *SlackChannel, user *SlackUser
 	threadID := ""
 	parentID := ""
 	isThreadRoot := msg.ThreadTS == "" || msg.ThreadTS == msg.Timestamp
-	
+
 	if msg.ThreadTS != "" {
 		threadID = fmt.Sprintf("thread_slack_%s_%s_%s", teamID, channel.ID, msg.ThreadTS)
 		if !isThreadRoot {
@@ -84,32 +84,32 @@ func SlackToNormalized(msg *SlackMessage, channel *SlackChannel, user *SlackUser
 
 	// Build normalized message
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "slack",
-		SourceID:   fmt.Sprintf("%s:%s:%s", teamID, channel.ID, msg.Timestamp),
-		Timestamp:  ts,
-		Author:     convertSlackUser(user, teamID),
-		Content:    normalizedText,
-		ContentHTML: "", // Slack doesn't provide HTML
-		Channel:    convertSlackChannel(channel, teamID),
-		ThreadID:   threadID,
-		ParentID:   parentID,
+		ID:           msgID,
+		SourceType:   "slack",
+		SourceID:     fmt.Sprintf("%s:%s:%s", teamID, channel.ID, msg.Timestamp),
+		Timestamp:    ts,
+		Author:       convertSlackUser(user, teamID),
+		Content:      normalizedText,
+		ContentHTML:  "", // Slack doesn't provide HTML
+		Channel:      convertSlackChannel(channel, teamID),
+		ThreadID:     threadID,
+		ParentID:     parentID,
 		IsThreadRoot: isThreadRoot,
-		Attachments: attachments,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  attachments,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
-			"team_id": teamID,
+			"team_id":    teamID,
 			"channel_id": channel.ID,
-			"ts": msg.Timestamp,
-			"thread_ts": msg.ThreadTS,
-			"type": msg.Type,
-			"subtype": msg.Subtype,
-			"bot_id": msg.BotID,
+			"ts":         msg.Timestamp,
+			"thread_ts":  msg.ThreadTS,
+			"type":       msg.Type,
+			"subtype":    msg.Subtype,
+			"bot_id":     msg.BotID,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -134,14 +134,14 @@ func convertSlackUser(user *SlackUser, teamID string) *User {
 		return nil
 	}
 	return &User{
-		ID:          fmt.Sprintf("user_slack_%s_%s", teamID, user.ID),
-		SourceType:  "slack",
-		SourceID:    user.ID,
-		DisplayName: user.Name,
-		RealName:    user.RealName,
-		Email:       user.Profile.Email,
-		AvatarURL:   user.Profile.Image192,
-		CanonicalID: "", // Will be set by identity resolution
+		ID:           fmt.Sprintf("user_slack_%s_%s", teamID, user.ID),
+		SourceType:   "slack",
+		SourceID:     user.ID,
+		DisplayName:  user.Name,
+		RealName:     user.RealName,
+		Email:        user.Profile.Email,
+		AvatarURL:    user.Profile.Image192,
+		CanonicalID:  "", // Will be set by identity resolution
 		AlternateIDs: nil,
 	}
 }
@@ -151,12 +151,12 @@ func convertSlackChannel(channel *SlackChannel, teamID string) *Channel {
 	if channel == nil {
 		return nil
 	}
-	
+
 	channelType := "channel"
 	if !channel.IsChannel {
 		channelType = "dm"
 	}
-	
+
 	return &Channel{
 		ID:          fmt.Sprintf("chan_slack_%s_%s", teamID, channel.ID),
 		SourceType:  "slack",
@@ -221,7 +221,7 @@ func normalizeSlackText(text string) string {
 		}
 		return match
 	})
-	
+
 	// Replace channel mentions: <#C123|channel-name> -> #channel-name
 	text = channelPattern.ReplaceAllStringFunc(text, func(match string) string {
 		parts := channelPattern.FindStringSubmatch(match)
@@ -233,7 +233,7 @@ func normalizeSlackText(text string) string {
 		}
 		return match
 	})
-	
+
 	// Replace URLs: <http://example.com|label> -> label (http://example.com)
 	text = urlPattern.ReplaceAllStringFunc(text, func(match string) string {
 		parts := urlPattern.FindStringSubmatch(match)
@@ -245,12 +245,12 @@ func normalizeSlackText(text string) string {
 		}
 		return match
 	})
-	
+
 	// Unescape HTML entities
 	text = strings.ReplaceAll(text, "&lt;", "<")
 	text = strings.ReplaceAll(text, "&gt;", ">")
 	text = strings.ReplaceAll(text, "&amp;", "&")
-	
+
 	return text
 }
 
@@ -259,11 +259,11 @@ func convertSlackAttachments(files []map[string]interface{}) []Attachment {
 	if len(files) == 0 {
 		return nil
 	}
-	
+
 	attachments := make([]Attachment, 0, len(files))
 	for _, file := range files {
 		att := Attachment{}
-		
+
 		if fileType, ok := file["filetype"].(string); ok {
 			att.Type = fileType
 		}
@@ -276,9 +276,9 @@ func convertSlackAttachments(files []map[string]interface{}) []Attachment {
 		if mime, ok := file["mimetype"].(string); ok {
 			att.MimeType = mime
 		}
-		
+
 		attachments = append(attachments, att)
 	}
-	
+
 	return attachments
 }

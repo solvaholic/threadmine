@@ -75,15 +75,15 @@ func (db *DB) GetChannel(id string) (*Channel, error) {
 
 // Workspace represents a workspace/organization
 type Workspace struct {
-	ID                   string
-	SourceType           string
-	SourceID             string
-	Name                 string
-	Domain               *string
-	AuthenticatedUserID  *string
-	Metadata             *string
-	FetchedAt            time.Time
-	ExpiresAt            *time.Time
+	ID                  string
+	SourceType          string
+	SourceID            string
+	Name                string
+	Domain              *string
+	AuthenticatedUserID *string
+	Metadata            *string
+	FetchedAt           time.Time
+	ExpiresAt           *time.Time
 }
 
 // SaveWorkspace saves or updates a workspace

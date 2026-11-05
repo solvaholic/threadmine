@@ -16,7 +16,7 @@ var (
 	githubMentionPattern = regexp.MustCompile(`(?:^|[^a-zA-Z0-9.])@([a-zA-Z0-9][-a-zA-Z0-9]*)`)
 	githubURLPattern     = regexp.MustCompile(`https?://[^\s\)]+`)
 	// Match code blocks with optional language (case-insensitive) and optional newline
-	githubCodeBlockPattern = regexp.MustCompile("(?s)```([a-zA-Z0-9_+-]*)\n?(.+?)```")
+	githubCodeBlockPattern  = regexp.MustCompile("(?s)```([a-zA-Z0-9_+-]*)\n?(.+?)```")
 	githubInlineCodePattern = regexp.MustCompile("`([^`]+)`")
 )
 
@@ -34,31 +34,31 @@ func GitHubIssueToNormalized(issue *github.Issue, repo, owner string, fetchedAt 
 
 	// Build normalized message for the issue
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "github",
-		SourceID:   fmt.Sprintf("%s/%s/issues/%d", owner, repo, issue.Number),
-		Timestamp:  issue.CreatedAt,
-		Author:     convertGitHubUser(&issue.User, owner, repo),
-		Content:    normalizeGitHubMarkdown(issue.Body),
-		ContentHTML: "", // Could use GitHub's rendering API in the future
-		Channel:    convertGitHubIssueToChannel(issue, repo, owner),
-		ThreadID:   threadID,
-		ParentID:   "",
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     fmt.Sprintf("%s/%s/issues/%d", owner, repo, issue.Number),
+		Timestamp:    issue.CreatedAt,
+		Author:       convertGitHubUser(&issue.User, owner, repo),
+		Content:      normalizeGitHubMarkdown(issue.Body),
+		ContentHTML:  "", // Could use GitHub's rendering API in the future
+		Channel:      convertGitHubIssueToChannel(issue, repo, owner),
+		ThreadID:     threadID,
+		ParentID:     "",
 		IsThreadRoot: true,
-		Attachments: nil,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  nil,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
-			"owner":      owner,
-			"repo":       repo,
+			"owner":        owner,
+			"repo":         repo,
 			"issue_number": issue.Number,
-			"title":      issue.Title,
-			"state":      issue.State,
-			"closed_at":  issue.ClosedAt,
+			"title":        issue.Title,
+			"state":        issue.State,
+			"closed_at":    issue.ClosedAt,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -78,21 +78,21 @@ func GitHubIssueCommentToNormalized(comment *github.Comment, issue *github.Issue
 	codeBlocks := extractGitHubCodeBlocks(comment.Body)
 
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "github",
-		SourceID:   fmt.Sprintf("%s/%s/issues/%d#issuecomment-%d", owner, repo, issue.Number, comment.ID),
-		Timestamp:  comment.CreatedAt,
-		Author:     convertGitHubUser(&comment.User, owner, repo),
-		Content:    normalizeGitHubMarkdown(comment.Body),
-		ContentHTML: "",
-		Channel:    convertGitHubIssueToChannel(issue, repo, owner),
-		ThreadID:   threadID,
-		ParentID:   parentID,
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     fmt.Sprintf("%s/%s/issues/%d#issuecomment-%d", owner, repo, issue.Number, comment.ID),
+		Timestamp:    comment.CreatedAt,
+		Author:       convertGitHubUser(&comment.User, owner, repo),
+		Content:      normalizeGitHubMarkdown(comment.Body),
+		ContentHTML:  "",
+		Channel:      convertGitHubIssueToChannel(issue, repo, owner),
+		ThreadID:     threadID,
+		ParentID:     parentID,
 		IsThreadRoot: false,
-		Attachments: nil,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  nil,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
 			"owner":        owner,
 			"repo":         repo,
@@ -100,8 +100,8 @@ func GitHubIssueCommentToNormalized(comment *github.Comment, issue *github.Issue
 			"comment_id":   comment.ID,
 			"updated_at":   comment.UpdatedAt,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -120,32 +120,32 @@ func GitHubPRToNormalized(pr *github.PullRequest, repo, owner string, fetchedAt 
 	codeBlocks := extractGitHubCodeBlocks(pr.Body)
 
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "github",
-		SourceID:   fmt.Sprintf("%s/%s/pull/%d", owner, repo, pr.Number),
-		Timestamp:  pr.CreatedAt,
-		Author:     convertGitHubUser(&pr.User, owner, repo),
-		Content:    normalizeGitHubMarkdown(pr.Body),
-		ContentHTML: "",
-		Channel:    convertGitHubPRToChannel(pr, repo, owner),
-		ThreadID:   threadID,
-		ParentID:   "",
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     fmt.Sprintf("%s/%s/pull/%d", owner, repo, pr.Number),
+		Timestamp:    pr.CreatedAt,
+		Author:       convertGitHubUser(&pr.User, owner, repo),
+		Content:      normalizeGitHubMarkdown(pr.Body),
+		ContentHTML:  "",
+		Channel:      convertGitHubPRToChannel(pr, repo, owner),
+		ThreadID:     threadID,
+		ParentID:     "",
 		IsThreadRoot: true,
-		Attachments: nil,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  nil,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
-			"owner":      owner,
-			"repo":       repo,
-			"pr_number":  pr.Number,
-			"title":      pr.Title,
-			"state":      pr.State,
-			"merged_at":  pr.MergedAt,
-			"closed_at":  pr.ClosedAt,
+			"owner":     owner,
+			"repo":      repo,
+			"pr_number": pr.Number,
+			"title":     pr.Title,
+			"state":     pr.State,
+			"merged_at": pr.MergedAt,
+			"closed_at": pr.ClosedAt,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -163,21 +163,21 @@ func GitHubPRCommentToNormalized(comment *github.Comment, pr *github.PullRequest
 	codeBlocks := extractGitHubCodeBlocks(comment.Body)
 
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "github",
-		SourceID:   fmt.Sprintf("%s/%s/pull/%d#issuecomment-%d", owner, repo, pr.Number, comment.ID),
-		Timestamp:  comment.CreatedAt,
-		Author:     convertGitHubUser(&comment.User, owner, repo),
-		Content:    normalizeGitHubMarkdown(comment.Body),
-		ContentHTML: "",
-		Channel:    convertGitHubPRToChannel(pr, repo, owner),
-		ThreadID:   threadID,
-		ParentID:   parentID,
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     fmt.Sprintf("%s/%s/pull/%d#issuecomment-%d", owner, repo, pr.Number, comment.ID),
+		Timestamp:    comment.CreatedAt,
+		Author:       convertGitHubUser(&comment.User, owner, repo),
+		Content:      normalizeGitHubMarkdown(comment.Body),
+		ContentHTML:  "",
+		Channel:      convertGitHubPRToChannel(pr, repo, owner),
+		ThreadID:     threadID,
+		ParentID:     parentID,
 		IsThreadRoot: false,
-		Attachments: nil,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  nil,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
 			"owner":      owner,
 			"repo":       repo,
@@ -185,8 +185,8 @@ func GitHubPRCommentToNormalized(comment *github.Comment, pr *github.PullRequest
 			"comment_id": comment.ID,
 			"updated_at": comment.UpdatedAt,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -204,30 +204,30 @@ func GitHubPRReviewToNormalized(review *github.Review, pr *github.PullRequest, r
 	codeBlocks := extractGitHubCodeBlocks(review.Body)
 
 	normalized := &NormalizedMessage{
-		ID:         msgID,
-		SourceType: "github",
-		SourceID:   fmt.Sprintf("%s/%s/pull/%d#pullrequestreview-%d", owner, repo, pr.Number, review.ID),
-		Timestamp:  review.SubmittedAt,
-		Author:     convertGitHubUser(&review.User, owner, repo),
-		Content:    normalizeGitHubMarkdown(review.Body),
-		ContentHTML: "",
-		Channel:    convertGitHubPRToChannel(pr, repo, owner),
-		ThreadID:   threadID,
-		ParentID:   parentID,
+		ID:           msgID,
+		SourceType:   "github",
+		SourceID:     fmt.Sprintf("%s/%s/pull/%d#pullrequestreview-%d", owner, repo, pr.Number, review.ID),
+		Timestamp:    review.SubmittedAt,
+		Author:       convertGitHubUser(&review.User, owner, repo),
+		Content:      normalizeGitHubMarkdown(review.Body),
+		ContentHTML:  "",
+		Channel:      convertGitHubPRToChannel(pr, repo, owner),
+		ThreadID:     threadID,
+		ParentID:     parentID,
 		IsThreadRoot: false,
-		Attachments: nil,
-		Mentions:   mentions,
-		URLs:       urls,
-		CodeBlocks: codeBlocks,
+		Attachments:  nil,
+		Mentions:     mentions,
+		URLs:         urls,
+		CodeBlocks:   codeBlocks,
 		SourceMetadata: map[string]interface{}{
-			"owner":      owner,
-			"repo":       repo,
-			"pr_number":  pr.Number,
-			"review_id":  review.ID,
-			"state":      review.State,
+			"owner":     owner,
+			"repo":      repo,
+			"pr_number": pr.Number,
+			"review_id": review.ID,
+			"state":     review.State,
 		},
-		FetchedAt:    fetchedAt,
-		NormalizedAt: time.Now(),
+		FetchedAt:     fetchedAt,
+		NormalizedAt:  time.Now(),
 		SchemaVersion: SchemaVersion,
 	}
 
@@ -240,14 +240,14 @@ func convertGitHubUser(user *github.User, owner, repo string) *User {
 		return nil
 	}
 	return &User{
-		ID:          fmt.Sprintf("user_github_%s", user.Login),
-		SourceType:  "github",
-		SourceID:    strconv.FormatInt(user.ID, 10),
-		DisplayName: user.Login,
-		RealName:    user.Name,
-		Email:       user.Email,
-		AvatarURL:   user.AvatarURL,
-		CanonicalID: "",
+		ID:           fmt.Sprintf("user_github_%s", user.Login),
+		SourceType:   "github",
+		SourceID:     strconv.FormatInt(user.ID, 10),
+		DisplayName:  user.Login,
+		RealName:     user.Name,
+		Email:        user.Email,
+		AvatarURL:    user.AvatarURL,
+		CanonicalID:  "",
 		AlternateIDs: nil,
 	}
 }
@@ -327,12 +327,12 @@ func normalizeGitHubMarkdown(text string) string {
 	// Remove inline code markers for plain text output
 	// (but we've already extracted code blocks separately)
 	text = githubInlineCodePattern.ReplaceAllString(text, "$1")
-	
+
 	// Basic Markdown cleanup
 	text = strings.ReplaceAll(text, "**", "")
 	text = strings.ReplaceAll(text, "__", "")
 	text = strings.ReplaceAll(text, "*", "")
 	text = strings.ReplaceAll(text, "_", "")
-	
+
 	return text
 }

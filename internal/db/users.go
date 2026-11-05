@@ -8,16 +8,16 @@ import (
 
 // User represents a user in the database
 type User struct {
-	ID           string
-	SourceType   string
-	SourceID     string
-	DisplayName  *string
-	RealName     *string
-	Email        *string
-	AvatarURL    *string
-	CanonicalID  *string
-	FetchedAt    time.Time
-	UpdatedAt    time.Time
+	ID          string
+	SourceType  string
+	SourceID    string
+	DisplayName *string
+	RealName    *string
+	Email       *string
+	AvatarURL   *string
+	CanonicalID *string
+	FetchedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // SaveUser saves or updates a user

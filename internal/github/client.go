@@ -85,17 +85,17 @@ func (c *Client) SearchIssues(ctx context.Context, query string, limit int) ([]I
 		TotalCount        int  `json:"total_count"`
 		IncompleteResults bool `json:"incomplete_results"`
 		Items             []struct {
-			Number    int    `json:"number"`
-			Title     string `json:"title"`
-			Body      string `json:"body"`
-			State     string `json:"state"`
-			User      struct {
+			Number int    `json:"number"`
+			Title  string `json:"title"`
+			Body   string `json:"body"`
+			State  string `json:"state"`
+			User   struct {
 				Login string `json:"login"`
 			} `json:"user"`
-			CreatedAt  time.Time  `json:"created_at"`
-			UpdatedAt  time.Time  `json:"updated_at"`
-			ClosedAt   *time.Time `json:"closed_at"`
-			Labels     []struct {
+			CreatedAt time.Time  `json:"created_at"`
+			UpdatedAt time.Time  `json:"updated_at"`
+			ClosedAt  *time.Time `json:"closed_at"`
+			Labels    []struct {
 				Name string `json:"name"`
 			} `json:"labels"`
 			RepositoryURL string `json:"repository_url"`
@@ -167,13 +167,13 @@ type TimelineEvent struct {
 	Event     string    `json:"event"`
 	CreatedAt time.Time `json:"created_at"`
 	Actor     User      `json:"actor"`
-	Body      string    `json:"body,omitempty"`       // For cross-references
+	Body      string    `json:"body,omitempty"` // For cross-references
 	Label     *struct {
 		Name string `json:"name"`
 	} `json:"label,omitempty"` // For labeled/unlabeled events
-	Assignee  *User  `json:"assignee,omitempty"`   // For assigned/unassigned
+	Assignee  *User  `json:"assignee,omitempty"` // For assigned/unassigned
 	Assigner  *User  `json:"assigner,omitempty"`
-	CommitID  string `json:"commit_id,omitempty"`   // For referenced events
+	CommitID  string `json:"commit_id,omitempty"` // For referenced events
 	CommitURL string `json:"commit_url,omitempty"`
 }
 

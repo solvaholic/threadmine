@@ -9,22 +9,22 @@ import (
 
 // Message represents a normalized message in the database
 type Message struct {
-	ID          string
-	SourceType  string
-	SourceID    string
-	Timestamp   time.Time
-	AuthorID    string
-	Content     string
-	ContentHTML *string
-	ChannelID   string
-	ThreadID    *string
-	ParentID    *string
-	IsThreadRoot bool
-	Mentions    []string
-	URLs        []string
-	CodeBlocks  []CodeBlock
-	Attachments []Attachment
-	NormalizedAt time.Time
+	ID            string
+	SourceType    string
+	SourceID      string
+	Timestamp     time.Time
+	AuthorID      string
+	Content       string
+	ContentHTML   *string
+	ChannelID     string
+	ThreadID      *string
+	ParentID      *string
+	IsThreadRoot  bool
+	Mentions      []string
+	URLs          []string
+	CodeBlocks    []CodeBlock
+	Attachments   []Attachment
+	NormalizedAt  time.Time
 	SchemaVersion string
 }
 
@@ -137,15 +137,15 @@ func (db *DB) GetMessage(id string) (*Message, error) {
 
 // SelectMessagesOptions defines options for selecting messages
 type SelectMessagesOptions struct {
-	SourceType  *string
-	AuthorID    *string
-	ChannelID   *string
-	ThreadID    *string
-	Since       *time.Time
-	Until       *time.Time
-	SearchText  *string
-	Limit       int
-	Offset      int
+	SourceType *string
+	AuthorID   *string
+	ChannelID  *string
+	ThreadID   *string
+	Since      *time.Time
+	Until      *time.Time
+	SearchText *string
+	Limit      int
+	Offset     int
 
 	// Enrichment filters
 	IsQuestion *bool
@@ -172,7 +172,7 @@ func (db *DB) SelectMessages(opts SelectMessagesOptions) ([]*Message, error) {
 
 	// Add LEFT JOIN with enrichments if any enrichment filters are specified
 	needsEnrichmentJoin := opts.IsQuestion != nil || opts.HasCode != nil ||
-	                       opts.HasLinks != nil || opts.HasQuotes != nil
+		opts.HasLinks != nil || opts.HasQuotes != nil
 	if needsEnrichmentJoin {
 		query += " LEFT JOIN enrichments e ON m.id = e.message_id"
 	}

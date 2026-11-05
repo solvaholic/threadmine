@@ -19,18 +19,18 @@ type Client struct {
 
 // AuthResult contains authentication information
 type AuthResult struct {
-	TeamName    string
-	TeamID      string
-	UserID      string
-	UserName    string
+	TeamName      string
+	TeamID        string
+	UserID        string
+	UserName      string
 	Authenticated bool
-	Client      *Client
+	Client        *Client
 }
 
 // Authenticate establishes a connection to Slack using cookies from the local Slack app
 func Authenticate(team string) (*AuthResult, error) {
 	client := slack.NewClient(team)
-	
+
 	// Attempt cookie-based authentication
 	err := client.WithCookieAuth()
 	if err != nil {
@@ -45,12 +45,12 @@ func Authenticate(team string) (*AuthResult, error) {
 
 	// Parse the response
 	var authResponse struct {
-		OK    bool   `json:"ok"`
-		Team  string `json:"team"`
+		OK     bool   `json:"ok"`
+		Team   string `json:"team"`
 		TeamID string `json:"team_id"`
-		User  string `json:"user"`
+		User   string `json:"user"`
 		UserID string `json:"user_id"`
-		Error string `json:"error"`
+		Error  string `json:"error"`
 	}
 
 	if err := json.Unmarshal(bs, &authResponse); err != nil {
@@ -73,22 +73,22 @@ func Authenticate(team string) (*AuthResult, error) {
 
 // SearchResult represents a Slack search result
 type SearchResult struct {
-	Type      string `json:"type"`
+	Type      string  `json:"type"`
 	Channel   Channel `json:"channel"`
-	User      string `json:"user"`
-	Username  string `json:"username"`
-	Text      string `json:"text"`
-	Timestamp string `json:"ts"`
-	ThreadTS  string `json:"thread_ts,omitempty"`
-	Permalink string `json:"permalink"`
+	User      string  `json:"user"`
+	Username  string  `json:"username"`
+	Text      string  `json:"text"`
+	Timestamp string  `json:"ts"`
+	ThreadTS  string  `json:"thread_ts,omitempty"`
+	Permalink string  `json:"permalink"`
 }
 
 // SearchResponse represents the response from search.messages
 type SearchResponse struct {
-	OK      bool `json:"ok"`
-	Query   string `json:"query"`
+	OK       bool   `json:"ok"`
+	Query    string `json:"query"`
 	Messages struct {
-		Total   int `json:"total"`
+		Total   int            `json:"total"`
 		Matches []SearchResult `json:"matches"`
 	} `json:"messages"`
 	Error string `json:"error"`
@@ -97,9 +97,9 @@ type SearchResponse struct {
 // SearchMessages searches for messages using the Slack search API
 func (c *Client) SearchMessages(ctx context.Context, query string, count int) (*SearchResponse, error) {
 	params := map[string]string{
-		"query": query,
-		"count": fmt.Sprintf("%d", count),
-		"sort": "timestamp",
+		"query":    query,
+		"count":    fmt.Sprintf("%d", count),
+		"sort":     "timestamp",
 		"sort_dir": "desc",
 	}
 
@@ -122,11 +122,11 @@ func (c *Client) SearchMessages(ctx context.Context, query string, count int) (*
 
 // ThreadMessage represents a message in a thread
 type ThreadMessage struct {
-	Type      string `json:"type"`
-	User      string `json:"user"`
-	Text      string `json:"text"`
-	Timestamp string `json:"ts"`
-	ThreadTS  string `json:"thread_ts,omitempty"`
+	Type         string `json:"type"`
+	User         string `json:"user"`
+	Text         string `json:"text"`
+	Timestamp    string `json:"ts"`
+	ThreadTS     string `json:"thread_ts,omitempty"`
 	ParentUserID string `json:"parent_user_id,omitempty"`
 }
 
@@ -134,8 +134,8 @@ type ThreadMessage struct {
 func (c *Client) GetThreadReplies(ctx context.Context, channelID, threadTS string) ([]ThreadMessage, error) {
 	params := map[string]string{
 		"channel": channelID,
-		"ts": threadTS,
-		"limit": "1000",
+		"ts":      threadTS,
+		"limit":   "1000",
 	}
 
 	bs, err := c.client.API(ctx, "GET", "conversations.replies", params, nil)
@@ -194,19 +194,19 @@ type UserInfo struct {
 	Name     string `json:"name"`
 	RealName string `json:"real_name"`
 	Profile  struct {
-		Email     string `json:"email"`
-		Image192  string `json:"image_192"`
+		Email    string `json:"email"`
+		Image192 string `json:"image_192"`
 	} `json:"profile"`
 }
 
 // Channel represents a Slack channel
 type Channel struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	IsChannel   bool   `json:"is_channel"`
-	IsPrivate   bool   `json:"is_private"`
-	IsMember    bool   `json:"is_member"`
-	NumMembers  int    `json:"num_members"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	IsChannel  bool   `json:"is_channel"`
+	IsPrivate  bool   `json:"is_private"`
+	IsMember   bool   `json:"is_member"`
+	NumMembers int    `json:"num_members"`
 }
 
 // Message represents a Slack message
@@ -307,7 +307,7 @@ func (c *Client) FetchMessages(ctx context.Context, channelID string, oldest tim
 		"channel": channelID,
 		"limit":   "1000",
 	}
-	
+
 	if !oldest.IsZero() {
 		params["oldest"] = fmt.Sprintf("%d.000000", oldest.Unix())
 	}
@@ -340,7 +340,7 @@ func loadMessagesFromCache(teamID, channelID string, since time.Time) (*messageC
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
-	
+
 	msgDir := filepath.Join(home, ".threadmine", "raw", "slack", "workspaces", teamID, "channels", channelID, "messages")
 	date := time.Now().Format("2006-01-02")
 	filePath := filepath.Join(msgDir, fmt.Sprintf("%s.json", date))
@@ -431,31 +431,31 @@ type messageCache struct {
 // formatAuthError provides user-friendly error messages for common authentication failures
 func formatAuthError(err error) error {
 	errMsg := err.Error()
-	
+
 	// Check for common error patterns and provide helpful guidance
 	if contains(errMsg, "no Slack cookie database found") || contains(errMsg, "could not access Slack cookie database") {
 		return fmt.Errorf("Slack cookie database not found. Are you logged into the Slack desktop app?\n  Original error: %v", err)
 	}
-	
+
 	if contains(errMsg, "no matching unlocked items found") {
 		return fmt.Errorf("Slack cookie not found in keychain. Try logging out and back into the Slack desktop app.\n  Original error: %v", err)
 	}
-	
+
 	if contains(errMsg, "failed to get cookie password") {
 		return fmt.Errorf("could not retrieve Slack cookie password from keychain. Check that the Slack app has keychain access.\n  Original error: %v", err)
 	}
-	
+
 	if contains(errMsg, "status code") {
 		return fmt.Errorf("failed to authenticate with Slack (network or server error). Check your internet connection.\n  Original error: %v", err)
 	}
-	
+
 	// Default: return the original error with context
 	return fmt.Errorf("Slack authentication failed: %w", err)
 }
 
 // contains checks if a string contains a substring (case-sensitive)
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(func() bool {
 			for i := 0; i <= len(s)-len(substr); i++ {
 				if s[i:i+len(substr)] == substr {

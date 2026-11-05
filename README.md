@@ -213,7 +213,39 @@ make clean
 make help
 ```
 
-All build commands automatically include `-tags "fts5"` for full-text search support.
+All compilation, vet, and test targets require CGO and append `-tags "fts5" -mod=readonly`. They preserve `GOFLAGS` for other options; use `TAGS` for additional build tags. `GO` selects the Go executable, and `GOTOOLCHAIN` defaults to `local` so automatic toolchain downloads cannot hide minimum-version failures.
+
+### Local checks
+
+Run `make check` before proposing a change. It checks formatting without modifying sources, verifies cached modules, runs vet and race-enabled tests, builds every package (including demos), and builds and runs the production CLI with `--help` in a temporary directory. Failures stop the command with a nonzero exit status; missing Go, formatter, C compiler, or disabled CGO are errors, not skipped checks. No Slack or GitHub credentials are required. The database tests open the real embedded schema in temporary directories and exercise FTS5 search and insert/update/delete index synchronization.
+
+| Target | Behavior |
+| --- | --- |
+| `check-fmt` | List unformatted Go files and fail without rewriting them; includes new sources, excludes `.git` and `vendor` directories |
+| `verify-modules` | Run `go mod verify` without changing manifests |
+| `vet` | Run `go vet` on all packages |
+| `test` | Run ordinary tests, without the race detector |
+| `test-race` | Run all tests with the race detector |
+| `build-all` | Compile all packages without leaving binaries in the checkout |
+| `smoke` | Build a temporary CLI and execute `--help` |
+| `check` | Run the deterministic local checks above, using `test-race` instead of a redundant ordinary test run |
+| `vuln` | Opt-in, network-dependent production CLI vulnerability scan |
+
+`fmt` still rewrites sources; `build`, `install`, `test-coverage`, `run`, `clean`, `lint`, and `help` retain their existing roles. `test-coverage` writes `coverage.out` and `coverage.html`; `clean` removes both.
+
+Use separate local invocations for the minimum Go version (exactly 1.26.0) and the current stable release, with CGO enabled and a working C compiler:
+
+```bash
+GOTOOLCHAIN=local make check GO=/path/to/go1.26.0/bin/go
+GOTOOLCHAIN=local make check GO=/path/to/current-stable/bin/go
+make test TAGS=additional_tag GOFLAGS=-count=1
+```
+
+`make vuln` runs pinned `golang.org/x/vuln/cmd/govulncheck@v1.9.0` (requires Go 1.26.0 or newer) with `-tags fts5 -show verbose ./cmd/mine`. The versioned `go run` keeps tool dependencies separate from this module's manifests. It needs network access to acquire the tool and query the vulnerability database. The default text-mode exit status gates reachable findings; it neither suppresses OpenPGP findings nor treats tool failures as success. Run it on macOS to scan the production CLI's macOS dependency graph. It is intentionally excluded from `check`.
+
+Go 1.26.0 is a minimum compatibility check, not a recommended security baseline. Use a current patched toolchain for `make vuln`, for example `make vuln GO=/path/to/current-patched/bin/go`. During macOS validation on 2026-11-05, the Go 1.26.0 scan reported 26 reachable standard-library vulnerabilities and failed; Go 1.27.3 reported zero reachable vulnerabilities and passed, while still displaying the non-reachable OpenPGP module advisory GO-2026-5932. Standard-library findings require a patched Go toolchain, not a module dependency upgrade.
+
+These are local commands intended for reuse by future Linux-only CI. They do not add workflows or consume hosted runners. macOS remains the primary development platform; Linux full-CLI compatibility is not established by passing checks on macOS. The existing Slack authentication dependency imports macOS keychain code, so a Linux build may require a separate portability change before CI can use the full aggregate.
 
 ## Examples
 
@@ -282,8 +314,9 @@ mine select --author alice --author bob --format graph > conversation.json
 
 ## Requirements
 
-- Go 1.26+
+- Go 1.26.0 or newer
 - Make (for automated building)
+- CGO enabled (`CGO_ENABLED=1`) and a C compiler on `PATH`
 - SQLite with FTS5 support (via `github.com/mattn/go-sqlite3`)
   - Automatically enabled with `make build`
 - Slack desktop app (for cookie-based auth)
